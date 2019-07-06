@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,9 +17,15 @@ import (
 )
 
 var (
+	headersOnly     bool
+	headersIncluded bool
+
 	insecure bool
-	address  string
 	sni      string
+
+	address string
+
+	crlf = []byte{'\r', '\n'}
 )
 
 func fatal(format string, a ...interface{}) {
@@ -27,6 +34,8 @@ func fatal(format string, a ...interface{}) {
 }
 
 func init() {
+	flag.BoolVar(&headersIncluded, "i", false, "Include response headers in the output")
+	flag.BoolVar(&headersOnly, "I", false, "Show response headers only")
 	flag.BoolVar(&insecure, "k", false, "Allow connections to SSL sites without certs")
 	flag.StringVar(&sni, "sni", "", "Specify the SNI instead of using the host")
 }
@@ -113,6 +122,35 @@ func main() {
 	}
 
 	out := os.Stdout
+
+	if headersIncluded || headersOnly {
+		// curl's -i/-I also shows response line, let's follow it
+		out.WriteString(resp.Proto + " " + resp.Status)
+		out.Write(crlf)
+
+		headers := make([]string, len(resp.Header))
+		i := 0
+		for k := range resp.Header {
+			headers[i] = k
+			i++
+		}
+		// make the output reproducible
+		sort.Sort(sort.StringSlice(headers))
+		for _, k := range headers {
+			v := resp.Header[k]
+			out.WriteString(k + ": " + strings.Join(v, ","))
+			out.Write(crlf)
+		}
+	}
+
+	if headersOnly {
+		return
+	}
+
+	if headersIncluded {
+		out.Write(crlf)
+	}
+
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
 		fatal("failed to copy the output from %s to stdout: %s", address, err.Error())
