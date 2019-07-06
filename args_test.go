@@ -3,15 +3,35 @@ package main
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	oldArgs           []string
+	oldMaxTime        time.Duration
+	oldConnectTimeout time.Duration
+)
+
+func saveArgs() {
+	oldArgs = os.Args
+	oldMaxTime = maxTime
+	oldConnectTimeout = connectTimeout
+}
+
+func resetArgs() {
+	os.Args = oldArgs
+	maxTime = oldMaxTime
+	connectTimeout = oldConnectTimeout
+}
+
 func assertCheckArgs(t *testing.T, args []string, expectedErrMsg string) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
+	saveArgs()
+	defer resetArgs()
+
 	os.Args = append([]string{"cmd"}, args...)
-	if (expectedErrMsg == "") {
+	if expectedErrMsg == "" {
 		assert.Equal(t, nil, checkArgs())
 	} else {
 		assert.Equal(t, expectedErrMsg, checkArgs().Error())
@@ -26,6 +46,13 @@ func TestCheckArgs(t *testing.T) {
 	assertCheckArgs(t, []string{"https://test.com"}, "")
 	assertCheckArgs(t, []string{"quic://test.com"}, "URL invalid")
 	assertCheckArgs(t, []string{}, "no URL specified")
+	assertCheckArgs(t, []string{"-max-time", "-1s", "test.com"},
+		"invalid argument: -max-time should not be negative, got -1s")
+	assertCheckArgs(t, []string{"-connect-timeout", "-1s", "test.com"},
+		"invalid argument: -connect-timeout should be positive, got -1s")
+	assertCheckArgs(t, []string{"-connect-timeout", "1s",
+		"-max-time", "100ms", "test.com"},
+		"invalid argument: -max-time should be larger than other timeouts")
 }
 
 func assertCheckSNI(t *testing.T, args []string, expected string) {

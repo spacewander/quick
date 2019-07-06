@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -13,7 +14,13 @@ import (
 	"strings"
 	"time"
 
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/h2quic"
+)
+
+const (
+	defaultConnectTimeout = 1000 * time.Millisecond
+	defaultMaxTime        = 0
 )
 
 var (
@@ -22,6 +29,9 @@ var (
 
 	insecure bool
 	sni      string
+
+	connectTimeout time.Duration
+	maxTime        time.Duration
 
 	address string
 
@@ -34,9 +44,14 @@ func fatal(format string, a ...interface{}) {
 }
 
 func init() {
+	timeFmt := ", in the format like 1.5s"
 	flag.BoolVar(&headersIncluded, "i", false, "Include response headers in the output")
 	flag.BoolVar(&headersOnly, "I", false, "Show response headers only")
 	flag.BoolVar(&insecure, "k", false, "Allow connections to SSL sites without certs")
+	flag.DurationVar(&connectTimeout, "connect-timeout", defaultConnectTimeout,
+		"Maximum time for the connect operation"+timeFmt)
+	flag.DurationVar(&maxTime, "max-time", defaultMaxTime,
+		"Maximum time for the whole operation"+timeFmt)
 	flag.StringVar(&sni, "sni", "", "Specify the SNI instead of using the host")
 }
 
@@ -89,19 +104,46 @@ func checkArgs() error {
 
 	address = uri.String()
 
+	if maxTime < 0 {
+		return fmt.Errorf(
+			"invalid argument: -max-time should not be negative, got %v", maxTime)
+	}
+
+	if maxTime != 0 && maxTime < connectTimeout {
+		return fmt.Errorf(
+			"invalid argument: -max-time should be larger than other timeouts")
+	}
+
+	if connectTimeout <= 0 {
+		return fmt.Errorf(
+			"invalid argument: -connect-timeout should be positive, got %v", connectTimeout)
+	}
+
 	return nil
 }
 
-const (
-	defaultConnectTimeout = 1000 * time.Millisecond
-)
+func dialWithTimeout(network, addr string, tlsCfg *tls.Config,
+	cfg *quic.Config) (sess quic.Session, err error) {
 
-func main() {
-	err := checkArgs()
-	if err != nil {
-		fatal("failed to check args: %s", err.Error())
+	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		sess, err = quic.DialAddrContext(ctx, addr, tlsCfg, cfg)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("connect timeout")
 	}
 
+	return sess, err
+}
+
+func run() error {
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: insecure,
 		ServerName:         sni,
@@ -109,16 +151,19 @@ func main() {
 
 	roundTripper := &h2quic.RoundTripper{
 		TLSClientConfig: tlsConf,
+		Dial:            dialWithTimeout,
 	}
 	defer roundTripper.Close()
 
 	hclient := &http.Client{
 		Transport: roundTripper,
+		// a timeout of zero means no timeout
+		Timeout: maxTime,
 	}
 
 	resp, err := hclient.Get(address)
 	if err != nil {
-		fatal("failed to GET %s: %s", address, err.Error())
+		return err
 	}
 
 	out := os.Stdout
@@ -144,7 +189,7 @@ func main() {
 	}
 
 	if headersOnly {
-		return
+		return nil
 	}
 
 	if headersIncluded {
@@ -153,6 +198,20 @@ func main() {
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		fatal("failed to copy the output from %s to stdout: %s", address, err.Error())
+		return fmt.Errorf("failed to copy the output from %s to stdout: %s", address, err.Error())
+	}
+
+	return nil
+}
+
+func main() {
+	err := checkArgs()
+	if err != nil {
+		fatal(err.Error())
+	}
+
+	err = run()
+	if err != nil {
+		fatal(err.Error())
 	}
 }
