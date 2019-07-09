@@ -143,6 +143,24 @@ func dialWithTimeout(network, addr string, tlsCfg *tls.Config,
 	return sess, err
 }
 
+type cancellableBody struct {
+	rc  io.ReadCloser
+	ctx context.Context
+}
+
+func (b *cancellableBody) Read(p []byte) (n int, err error) {
+	select {
+	case <-b.ctx.Done():
+		return 0, b.ctx.Err()
+	default:
+	}
+	return b.rc.Read(p)
+}
+
+func (b *cancellableBody) Close() error {
+	err := b.rc.Close()
+	return err
+}
 func run() error {
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: insecure,
@@ -160,8 +178,10 @@ func run() error {
 	}
 
 	req, err := http.NewRequest("GET", address, nil)
+	var ctx context.Context
 	if maxTime > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), maxTime)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), maxTime)
 		defer cancel()
 		req = req.WithContext(ctx)
 	}
@@ -201,9 +221,17 @@ func run() error {
 		out.Write(crlf)
 	}
 
+	if maxTime > 0 {
+		resp.Body = &cancellableBody{
+			rc:  resp.Body,
+			ctx: ctx,
+		}
+	}
+
+	defer resp.Body.Close()
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to copy the output from %s to stdout: %s", address, err.Error())
+		return fmt.Errorf("failed to copy the output from %s: %s", address, err.Error())
 	}
 
 	return nil

@@ -87,10 +87,9 @@ func startServer(done chan struct{}, handler http.Handler) {
 	}
 	server.TLSConfig = tlsCfg
 
-	err = server.Serve(nil)
-	if err != nil {
-		panic(err)
-	}
+	go func() {
+		server.Serve(nil)
+	}()
 	<-done
 	err = server.Close()
 	if err != nil {
@@ -119,5 +118,32 @@ func (suite *ClientSuite) TestMaxTime() {
 		assert.NotNil(t, err)
 	} else {
 		assert.Equal(t, "Get "+address+": context deadline exceeded", err.Error())
+	}
+}
+
+func (suite *ClientSuite) TestMaxTimeReadBodyTimeout() {
+	address = addrListened
+	insecure = true
+	connectTimeout = 20 * time.Millisecond
+	maxTime = 30 * time.Millisecond
+
+	done := make(chan struct{})
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for i := 0; i < 1000; i++ {
+			w.Write([]byte("a"))
+			time.Sleep(1 * time.Millisecond)
+		}
+	})
+	go func() {
+		startServer(done, handler)
+	}()
+
+	t := suite.T()
+	err := run()
+	close(done)
+	if err == nil {
+		assert.NotNil(t, err)
+	} else {
+		assert.Equal(t, "failed to copy the output from "+address+": context deadline exceeded", err.Error())
 	}
 }
