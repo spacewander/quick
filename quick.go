@@ -20,7 +20,7 @@ import (
 
 const (
 	defaultConnectTimeout = 1000 * time.Millisecond
-	defaultMaxTime        = 0
+	defaultMaxTime        = 0 // a timeout of zero means no timeout
 )
 
 var (
@@ -157,11 +157,16 @@ func run() error {
 
 	hclient := &http.Client{
 		Transport: roundTripper,
-		// a timeout of zero means no timeout
-		Timeout: maxTime,
 	}
 
-	resp, err := hclient.Get(address)
+	req, err := http.NewRequest("GET", address, nil)
+	if maxTime > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), maxTime)
+		defer cancel()
+		req = req.WithContext(ctx)
+	}
+
+	resp, err := hclient.Do(req)
 	if err != nil {
 		return err
 	}
