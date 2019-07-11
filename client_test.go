@@ -169,7 +169,7 @@ func (suite *ClientSuite) TestUserAgent() {
 		assert.Nil(t, err, err.Error())
 	} else {
 		assert.Nil(t, err)
-		assert.Equal(t, string(b.Bytes()), userAgent)
+		assert.Equal(t, userAgent, string(b.Bytes()))
 	}
 	<-done
 }
@@ -188,7 +188,7 @@ func (suite *ClientSuite) TestDefaultUserAgent() {
 		assert.Nil(t, err, err.Error())
 	} else {
 		assert.Nil(t, err)
-		assert.Equal(t, string(b.Bytes()), "quick/"+version)
+		assert.Equal(t, "quick/"+version, string(b.Bytes()))
 	}
 	<-done
 }
