@@ -33,6 +33,7 @@ var (
 	sni      string
 
 	connectTimeout time.Duration
+	idleTimeout    time.Duration
 	maxTime        time.Duration
 
 	address string
@@ -54,6 +55,9 @@ func init() {
 	flag.BoolVar(&insecure, "k", false, "Allow connections to SSL sites without certs")
 	flag.DurationVar(&connectTimeout, "connect-timeout", defaultConnectTimeout,
 		"Maximum time for the connect operation"+timeFmt)
+	flag.DurationVar(&idleTimeout, "idle-timeout", 0,
+		"Close connection if handshake successfully and no incoming network activity in this duration.\n"+
+			"A reasonable duration will be chosed if not specified.")
 	flag.DurationVar(&maxTime, "max-time", defaultMaxTime,
 		"Maximum time for the whole operation"+timeFmt)
 	flag.StringVar(&sni, "sni", "", "Specify the SNI instead of using the host")
@@ -114,7 +118,7 @@ func checkArgs() error {
 			"invalid argument: -max-time should not be negative, got %v", maxTime)
 	}
 
-	if maxTime != 0 && maxTime < connectTimeout {
+	if maxTime != 0 && (maxTime < connectTimeout || maxTime < idleTimeout) {
 		return fmt.Errorf(
 			"invalid argument: -max-time should be larger than other timeouts")
 	}
@@ -167,12 +171,16 @@ func (b *cancellableBody) Close() error {
 	return err
 }
 func run(out io.Writer) error {
+	quicConf := &quic.Config{
+		IdleTimeout: idleTimeout,
+	}
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: insecure,
 		ServerName:         sni,
 	}
 
 	roundTripper := &h2quic.RoundTripper{
+		QuicConfig:      quicConf,
 		TLSClientConfig: tlsConf,
 		Dial:            dialWithTimeout,
 	}

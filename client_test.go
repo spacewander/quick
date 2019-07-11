@@ -154,6 +154,50 @@ func (suite *ClientSuite) TestMaxTimeReadBodyTimeout() {
 	<-done
 }
 
+func (suite *ClientSuite) TestIdleTimeout() {
+	idleTimeout = 30 * time.Millisecond
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for i := 0; i < 1000; i++ {
+			time.Sleep(1 * time.Millisecond)
+		}
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	err := run(&bytes.Buffer{})
+	done <- struct{}{}
+	if err == nil {
+		assert.NotNil(t, err)
+	} else {
+		assert.Equal(t, "Get "+address+": InvalidHeadersStreamData: NetworkIdleTimeout: No recent network activity.", err.Error())
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestIdleTimeoutWithDiscreteWrites() {
+	idleTimeout = 30 * time.Millisecond
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for i := 0; i < 10; i++ {
+			time.Sleep(10 * time.Millisecond)
+			w.Write([]byte("1"))
+		}
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.NotNil(t, err)
+	} else {
+		assert.Equal(t, bytes.Repeat([]byte("1"), 10), b.Bytes())
+	}
+	<-done
+}
+
 func (suite *ClientSuite) TestUserAgent() {
 	userAgent = "opensema"
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
