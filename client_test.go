@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -29,6 +30,8 @@ type ClientSuite struct {
 
 func (suite *ClientSuite) SetupTest() {
 	saveArgs()
+	address = addrListened
+	insecure = true
 }
 
 func TestClientTestSuite(t *testing.T) {
@@ -44,7 +47,7 @@ func (suite *ClientSuite) TestConnectTimeout() {
 	connectTimeout = 10 * time.Millisecond
 
 	t := suite.T()
-	err := run()
+	err := run(&bytes.Buffer{})
 	assert.NotNil(t, err)
 	assert.Equal(t, "Get "+address+": connect timeout", err.Error())
 }
@@ -73,77 +76,119 @@ var (
 	tlsCfg = generateTLSConfig()
 )
 
-func startServer(done chan struct{}, handler http.Handler) {
-	netAddr, err := url.Parse(addrListened)
-	if err != nil {
-		panic(err)
-	}
-
-	server := &h2quic.Server{
-		Server: &http.Server{
-			Addr:    netAddr.Host,
-			Handler: handler,
-		},
-	}
-	server.TLSConfig = tlsCfg
-
+func startServer(handler http.Handler) chan struct{} {
+	done := make(chan struct{})
 	go func() {
-		server.Serve(nil)
+		netAddr, err := url.Parse(addrListened)
+		if err != nil {
+			panic(err)
+		}
+
+		server := &h2quic.Server{
+			Server: &http.Server{
+				Addr:    netAddr.Host,
+				Handler: handler,
+			},
+		}
+		server.TLSConfig = tlsCfg
+
+		go func() {
+			server.Serve(nil)
+		}()
+		<-done
+		err = server.Close()
+		if err != nil {
+			panic(err)
+		}
+		close(done)
 	}()
-	<-done
-	err = server.Close()
-	if err != nil {
-		panic(err)
-	}
+
+	// ensure server is started
+	time.Sleep(100 * time.Millisecond)
+
+	return done
 }
 
 func (suite *ClientSuite) TestMaxTime() {
-	address = addrListened
-	insecure = true
 	connectTimeout = 20 * time.Millisecond
 	maxTime = 30 * time.Millisecond
 
-	done := make(chan struct{})
-	defer func() { close(done) }()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(1000 * time.Millisecond)
+		for i := 0; i < 1000; i++ {
+			time.Sleep(1 * time.Millisecond)
+		}
 	})
-	go func() {
-		startServer(done, handler)
-	}()
+	done := startServer(handler)
 
 	t := suite.T()
-	err := run()
+	err := run(&bytes.Buffer{})
+	done <- struct{}{}
 	if err == nil {
 		assert.NotNil(t, err)
 	} else {
 		assert.Equal(t, "Get "+address+": context deadline exceeded", err.Error())
 	}
+	<-done
 }
 
 func (suite *ClientSuite) TestMaxTimeReadBodyTimeout() {
-	address = addrListened
-	insecure = true
 	connectTimeout = 20 * time.Millisecond
 	maxTime = 30 * time.Millisecond
 
-	done := make(chan struct{})
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 1000; i++ {
 			w.Write([]byte("a"))
 			time.Sleep(1 * time.Millisecond)
 		}
 	})
-	go func() {
-		startServer(done, handler)
-	}()
+	done := startServer(handler)
 
 	t := suite.T()
-	err := run()
-	close(done)
+	err := run(&bytes.Buffer{})
+	done <- struct{}{}
 	if err == nil {
 		assert.NotNil(t, err)
 	} else {
 		assert.Equal(t, "failed to copy the output from "+address+": context deadline exceeded", err.Error())
 	}
+	<-done
+}
+
+func (suite *ClientSuite) TestUserAgent() {
+	userAgent = "opensema"
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.UserAgent()))
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Nil(t, err)
+		assert.Equal(t, string(b.Bytes()), userAgent)
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestDefaultUserAgent() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.UserAgent()))
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Nil(t, err)
+		assert.Equal(t, string(b.Bytes()), "quick/"+version)
+	}
+	<-done
 }

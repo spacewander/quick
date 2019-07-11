@@ -21,6 +21,8 @@ import (
 const (
 	defaultConnectTimeout = 1000 * time.Millisecond
 	defaultMaxTime        = 0 // a timeout of zero means no timeout
+
+	version = "0.1-dev"
 )
 
 var (
@@ -34,6 +36,8 @@ var (
 	maxTime        time.Duration
 
 	address string
+
+	userAgent string
 
 	crlf = []byte{'\r', '\n'}
 )
@@ -53,6 +57,7 @@ func init() {
 	flag.DurationVar(&maxTime, "max-time", defaultMaxTime,
 		"Maximum time for the whole operation"+timeFmt)
 	flag.StringVar(&sni, "sni", "", "Specify the SNI instead of using the host")
+	flag.StringVar(&userAgent, "user-agent", "quick/"+version, "Specify the User-Agent to use")
 }
 
 func checkArgs() error {
@@ -161,7 +166,7 @@ func (b *cancellableBody) Close() error {
 	err := b.rc.Close()
 	return err
 }
-func run() error {
+func run(out io.Writer) error {
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: insecure,
 		ServerName:         sni,
@@ -186,16 +191,16 @@ func run() error {
 		req = req.WithContext(ctx)
 	}
 
+	req.Header.Set("User-Agent", userAgent)
+
 	resp, err := hclient.Do(req)
 	if err != nil {
 		return err
 	}
 
-	out := os.Stdout
-
 	if headersIncluded || headersOnly {
 		// curl's -i/-I also shows response line, let's follow it
-		out.WriteString(resp.Proto + " " + resp.Status)
+		io.WriteString(out, resp.Proto+" "+resp.Status)
 		out.Write(crlf)
 
 		headers := make([]string, len(resp.Header))
@@ -208,7 +213,7 @@ func run() error {
 		sort.Sort(sort.StringSlice(headers))
 		for _, k := range headers {
 			v := resp.Header[k]
-			out.WriteString(k + ": " + strings.Join(v, ","))
+			io.WriteString(out, k+": "+strings.Join(v, ","))
 			out.Write(crlf)
 		}
 	}
@@ -243,7 +248,7 @@ func main() {
 		fatal(err.Error())
 	}
 
-	err = run()
+	err = run(os.Stdout)
 	if err != nil {
 		fatal(err.Error())
 	}
