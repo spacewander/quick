@@ -192,3 +192,76 @@ func (suite *ClientSuite) TestDefaultUserAgent() {
 	}
 	<-done
 }
+
+func (suite *ClientSuite) TestReadResponseBody() {
+	data := bytes.Repeat([]byte("hello world"), 1024)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(data)
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Nil(t, err)
+		assert.Equal(t, string(data), string(b.Bytes()))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestReadResponseHeaderInclude() {
+	data := "hello world"
+	body := bytes.Repeat([]byte("test"), 10)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("data", data)
+		w.Write(body)
+	})
+	done := startServer(handler)
+
+	headersIncluded = true
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Nil(t, err)
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("Data: "+data+"\r\n")))
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), body))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestReadResponseHeaderOnly() {
+	data := "hello world"
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("data", data)
+		w.Write(bytes.Repeat([]byte("test"), 1000))
+	})
+	done := startServer(handler)
+
+	headersOnly = true
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Nil(t, err)
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("Data: "+data+"\r\n")))
+		assert.Equal(t, false, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
+		assert.Equal(t, false, bytes.Contains(b.Bytes(), []byte("test")))
+	}
+	<-done
+}

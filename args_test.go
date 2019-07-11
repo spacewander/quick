@@ -12,18 +12,25 @@ var (
 	oldArgs           []string
 	oldMaxTime        time.Duration
 	oldConnectTimeout time.Duration
+
+	oldHeadersOnly     bool
+	oldHeadersIncluded bool
 )
 
 func saveArgs() {
 	oldArgs = os.Args
 	oldMaxTime = maxTime
 	oldConnectTimeout = connectTimeout
+	oldHeadersOnly = headersOnly
+	oldHeadersIncluded = headersIncluded
 }
 
 func resetArgs() {
 	os.Args = oldArgs
 	maxTime = oldMaxTime
 	connectTimeout = oldConnectTimeout
+	headersOnly = oldHeadersOnly
+	headersIncluded = oldHeadersIncluded
 }
 
 func assertCheckArgs(t *testing.T, args []string, expectedErrMsg string) {
