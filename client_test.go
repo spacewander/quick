@@ -309,3 +309,47 @@ func (suite *ClientSuite) TestReadResponseHeaderOnly() {
 	}
 	<-done
 }
+
+func (suite *ClientSuite) TestSendHeader() {
+	customHeaders.Set(" input : blahblah ")
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Write(w)
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Nil(t, err)
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("Input: blahblah\r\n")))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestSendHeaders() {
+	customHeaders.Set(" input : blahblah ")
+	customHeaders.Set(" this :  value ")
+	customHeaders.Set(" this :  is ok")
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Write(w)
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Nil(t, err)
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("Input: blahblah\r\n")))
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("This: value\r\n")))
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("This: is ok\r\n")))
+	}
+	<-done
+}

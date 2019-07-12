@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"flag"
@@ -25,6 +26,33 @@ const (
 	version = "0.1-dev"
 )
 
+type headersValue struct {
+	hdr http.Header
+}
+
+func (hv *headersValue) String() string {
+	if hv == nil {
+		return ""
+	}
+	var b bytes.Buffer
+	hv.hdr.Write(&b)
+	return string(bytes.TrimSuffix(b.Bytes(), crlf))
+}
+
+func (hv *headersValue) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if colon := strings.IndexByte(value, ':'); colon != -1 && 0 < colon && colon < len(value)-1 {
+		// if the provided header contains invalid character like '_',
+		// it will be passed without rejection because it can be accepted by
+		// http.Header.Add.
+		name := strings.TrimSpace(value[:colon])
+		val := strings.TrimSpace(value[colon+1:])
+		hv.hdr.Add(name, val)
+		return nil
+	}
+	return fmt.Errorf("invalid header: [%s]", value)
+}
+
 var (
 	headersOnly     bool
 	headersIncluded bool
@@ -36,17 +64,14 @@ var (
 	idleTimeout    time.Duration
 	maxTime        time.Duration
 
+	customHeaders headersValue
+
 	address string
 
 	userAgent string
 
 	crlf = []byte{'\r', '\n'}
 )
-
-func fatal(format string, a ...interface{}) {
-	fmt.Printf(format+"\n", a...)
-	os.Exit(1)
-}
 
 func init() {
 	timeFmt := ", in the format like 1.5s"
@@ -62,6 +87,7 @@ func init() {
 		"Maximum time for the whole operation"+timeFmt)
 	flag.StringVar(&sni, "sni", "", "Specify the SNI instead of using the host")
 	flag.StringVar(&userAgent, "user-agent", "quick/"+version, "Specify the User-Agent to use")
+	flag.Var(&customHeaders, "H", "Pass custom header(s) to server")
 }
 
 func checkArgs() error {
@@ -200,6 +226,9 @@ func run(out io.Writer) error {
 	}
 
 	req.Header.Set("User-Agent", userAgent)
+	for k, v := range customHeaders.hdr {
+		req.Header[k] = v
+	}
 
 	resp, err := hclient.Do(req)
 	if err != nil {
@@ -248,6 +277,11 @@ func run(out io.Writer) error {
 	}
 
 	return nil
+}
+
+func fatal(format string, a ...interface{}) {
+	fmt.Printf(format+"\n", a...)
+	os.Exit(1)
 }
 
 func main() {

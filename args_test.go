@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -34,6 +35,8 @@ func resetArgs() {
 	idleTimeout = oldIdleTimeout
 	headersOnly = oldHeadersOnly
 	headersIncluded = oldHeadersIncluded
+
+	customHeaders.hdr = http.Header{}
 }
 
 func assertCheckArgs(t *testing.T, args []string, expectedErrMsg string) {
@@ -97,4 +100,38 @@ func TestCheckAddr(t *testing.T) {
 	assertCheckAddr(t, []string{"https://test.com"}, "https://test.com:443")
 	assertCheckAddr(t, []string{"https://127.0.0.1"}, "https://127.0.0.1:443")
 	assertCheckAddr(t, []string{"https://127.0.0.1:8443"}, "https://127.0.0.1:8443")
+}
+
+func assertCheckHeaders(t *testing.T, args []string, expected string) {
+	saveArgs()
+	defer resetArgs()
+
+	os.Args = append([]string{"cmd"}, args...)
+	os.Args = append(os.Args, "test.com")
+	err := checkArgs()
+	if err == nil {
+		if expected == "" {
+			assert.Fail(t, "should fail")
+		} else {
+			assert.Equal(t, expected, customHeaders.String())
+		}
+	} else {
+		if expected != "" {
+			assert.NotNil(t, err, err.Error())
+		}
+	}
+}
+
+func TestCheckHeaders(t *testing.T) {
+	assertCheckHeaders(t, []string{"-H", "xx : yy"}, "Xx: yy")
+	assertCheckHeaders(t, []string{"-H", "x_x : yy "}, "X_x: yy")
+	assertCheckHeaders(t, []string{"-H", " x_x:yy"}, "X_x: yy")
+	assertCheckHeaders(t, []string{"-H", "A: B", "-H", "B: C", "-H", "A: C"}, "A: B\r\nA: C\r\nB: C")
+}
+
+func TestInvalidHeader(t *testing.T) {
+	assert.NotNil(t, customHeaders.Set("A"))
+	assert.NotNil(t, customHeaders.Set("A:"))
+	assert.NotNil(t, customHeaders.Set(":A"))
+	assert.NotNil(t, customHeaders.Set(" : "))
 }
