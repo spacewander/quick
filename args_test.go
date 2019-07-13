@@ -1,53 +1,45 @@
 package main
 
 import (
-	"net/http"
 	"os"
+	"reflect"
 	"testing"
-	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 )
 
-var (
-	oldArgs           []string
-	oldMaxTime        time.Duration
-	oldConnectTimeout time.Duration
-	oldIdleTimeout    time.Duration
-
-	oldHeadersOnly     bool
-	oldHeadersIncluded bool
-)
-
-func saveArgs() {
-	oldArgs = os.Args
-	oldMaxTime = maxTime
-	oldConnectTimeout = connectTimeout
-	oldIdleTimeout = idleTimeout
-	oldHeadersOnly = headersOnly
-	oldHeadersIncluded = headersIncluded
-}
-
 func resetArgs() {
-	os.Args = oldArgs
-	maxTime = oldMaxTime
-	connectTimeout = oldConnectTimeout
-	idleTimeout = oldIdleTimeout
-	headersOnly = oldHeadersOnly
-	headersIncluded = oldHeadersIncluded
+	newCfg := newQuickConfig()
 
-	customHeaders.hdr = http.Header{}
+	aStruct := reflect.ValueOf(config).Elem()
+	bStruct := reflect.ValueOf(newCfg).Elem()
+	// need to copy field by field, because the address of each field is
+	// referred by the flag.Var.
+	for i := 0; i < aStruct.NumField(); i++ {
+		aField := aStruct.Field(i)
+		aField = reflect.NewAt(aField.Type(), unsafe.Pointer(aField.UnsafeAddr())).Elem()
+
+		bField := bStruct.Field(i)
+		bField = reflect.NewAt(bField.Type(), unsafe.Pointer(bField.UnsafeAddr())).Elem()
+
+		aField.Set(bField)
+	}
 }
 
 func assertCheckArgs(t *testing.T, args []string, expectedErrMsg string) {
-	saveArgs()
 	defer resetArgs()
 
 	os.Args = append([]string{"cmd"}, args...)
+	err := checkArgs()
 	if expectedErrMsg == "" {
-		assert.Equal(t, nil, checkArgs())
+		assert.Equal(t, nil, err)
 	} else {
-		assert.Equal(t, expectedErrMsg, checkArgs().Error())
+		if err == nil {
+			assert.Fail(t, "should fail")
+		} else {
+			assert.Equal(t, expectedErrMsg, err.Error())
+		}
 	}
 }
 
@@ -57,6 +49,7 @@ func TestCheckArgs(t *testing.T) {
 	assertCheckArgs(t, []string{"/test"}, "URL invalid")
 	assertCheckArgs(t, []string{"http://test.com"}, "URL invalid")
 	assertCheckArgs(t, []string{"https://test.com"}, "")
+	assertCheckArgs(t, []string{"%@3"}, "parse https://%@3: invalid URL escape \"%\"")
 	assertCheckArgs(t, []string{"quic://test.com"}, "URL invalid")
 	assertCheckArgs(t, []string{}, "no URL specified")
 	assertCheckArgs(t, []string{"-max-time", "-1s", "test.com"},
@@ -72,10 +65,21 @@ func TestCheckArgs(t *testing.T) {
 }
 
 func assertCheckSNI(t *testing.T, args []string, expected string) {
-	defer func() { sni = "" }()
-	sni = ""
-	assertCheckArgs(t, args, "")
-	assert.Equal(t, expected, sni)
+	defer resetArgs()
+
+	os.Args = append([]string{"cmd"}, args...)
+	err := checkArgs()
+	if err == nil {
+		if expected == "" {
+			assert.Fail(t, "should fail")
+		} else {
+			assert.Equal(t, expected, config.sni)
+		}
+	} else {
+		if expected != "" {
+			assert.NotNil(t, err, err.Error())
+		}
+	}
 }
 
 func TestCheckSNI(t *testing.T) {
@@ -84,13 +88,27 @@ func TestCheckSNI(t *testing.T) {
 	assertCheckSNI(t, []string{"test.com:8443"}, "test.com")
 	assertCheckSNI(t, []string{"-sni", "hi", "127.0.0.1:8443"}, "hi")
 	assertCheckSNI(t, []string{"-sni", "hi:123", "127.0.0.1:8443"}, "hi")
+
+	assertCheckArgs(t, []string{"-sni", "hi:1:123", "127.0.0.1:8443"},
+		"address hi:1:123: too many colons in address")
 }
 
 func assertCheckAddr(t *testing.T, args []string, expected string) {
-	defer func() { address = "" }()
-	address = ""
-	assertCheckArgs(t, args, "")
-	assert.Equal(t, expected, address)
+	defer resetArgs()
+
+	os.Args = append([]string{"cmd"}, args...)
+	err := checkArgs()
+	if err == nil {
+		if expected == "" {
+			assert.Fail(t, "should fail")
+		} else {
+			assert.Equal(t, expected, config.address)
+		}
+	} else {
+		if expected != "" {
+			assert.NotNil(t, err, err.Error())
+		}
+	}
 }
 
 func TestCheckAddr(t *testing.T) {
@@ -100,10 +118,10 @@ func TestCheckAddr(t *testing.T) {
 	assertCheckAddr(t, []string{"https://test.com"}, "https://test.com:443")
 	assertCheckAddr(t, []string{"https://127.0.0.1"}, "https://127.0.0.1:443")
 	assertCheckAddr(t, []string{"https://127.0.0.1:8443"}, "https://127.0.0.1:8443")
+	assertCheckAddr(t, []string{"127.0.0.1:8000/xxx?a=2"}, "https://127.0.0.1:8000/xxx?a=2")
 }
 
 func assertCheckHeaders(t *testing.T, args []string, expected string) {
-	saveArgs()
 	defer resetArgs()
 
 	os.Args = append([]string{"cmd"}, args...)
@@ -113,7 +131,7 @@ func assertCheckHeaders(t *testing.T, args []string, expected string) {
 		if expected == "" {
 			assert.Fail(t, "should fail")
 		} else {
-			assert.Equal(t, expected, customHeaders.String())
+			assert.Equal(t, expected, config.customHeaders.String())
 		}
 	} else {
 		if expected != "" {
@@ -130,8 +148,8 @@ func TestCheckHeaders(t *testing.T) {
 }
 
 func TestInvalidHeader(t *testing.T) {
-	assert.NotNil(t, customHeaders.Set("A"))
-	assert.NotNil(t, customHeaders.Set("A:"))
-	assert.NotNil(t, customHeaders.Set(":A"))
-	assert.NotNil(t, customHeaders.Set(" : "))
+	assert.NotNil(t, config.customHeaders.Set("A"))
+	assert.NotNil(t, config.customHeaders.Set("A:"))
+	assert.NotNil(t, config.customHeaders.Set(":A"))
+	assert.NotNil(t, config.customHeaders.Set(" : "))
 }

@@ -29,9 +29,8 @@ type ClientSuite struct {
 }
 
 func (suite *ClientSuite) SetupTest() {
-	saveArgs()
-	address = addrListened
-	insecure = true
+	config.address = addrListened
+	config.insecure = true
 }
 
 func TestClientTestSuite(t *testing.T) {
@@ -43,13 +42,14 @@ func (suite *ClientSuite) TearDownTest() {
 }
 
 func (suite *ClientSuite) TestConnectTimeout() {
-	address = addrNotListened
-	connectTimeout = 10 * time.Millisecond
+	config.address = addrNotListened
+	config.connectTimeout = 10 * time.Millisecond
 
 	t := suite.T()
 	err := run(&bytes.Buffer{})
 	assert.NotNil(t, err)
-	assert.Equal(t, "Get "+address+": connect timeout", err.Error())
+	assert.Equal(t, "Get "+config.address+": connect timeout",
+		err.Error())
 }
 
 func generateTLSConfig() *tls.Config {
@@ -110,8 +110,8 @@ func startServer(handler http.Handler) chan struct{} {
 }
 
 func (suite *ClientSuite) TestMaxTime() {
-	connectTimeout = 20 * time.Millisecond
-	maxTime = 30 * time.Millisecond
+	config.connectTimeout = 20 * time.Millisecond
+	config.maxTime = 30 * time.Millisecond
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 1000; i++ {
@@ -126,14 +126,15 @@ func (suite *ClientSuite) TestMaxTime() {
 	if err == nil {
 		assert.NotNil(t, err)
 	} else {
-		assert.Equal(t, "Get "+address+": context deadline exceeded", err.Error())
+		assert.Equal(t,
+			"Get "+config.address+": context deadline exceeded", err.Error())
 	}
 	<-done
 }
 
 func (suite *ClientSuite) TestMaxTimeReadBodyTimeout() {
-	connectTimeout = 20 * time.Millisecond
-	maxTime = 30 * time.Millisecond
+	config.connectTimeout = 20 * time.Millisecond
+	config.maxTime = 30 * time.Millisecond
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 1000; i++ {
@@ -149,13 +150,15 @@ func (suite *ClientSuite) TestMaxTimeReadBodyTimeout() {
 	if err == nil {
 		assert.NotNil(t, err)
 	} else {
-		assert.Equal(t, "failed to copy the output from "+address+": context deadline exceeded", err.Error())
+		assert.Equal(t,
+			"failed to copy the output from "+config.address+": context deadline exceeded",
+			err.Error())
 	}
 	<-done
 }
 
 func (suite *ClientSuite) TestIdleTimeout() {
-	idleTimeout = 30 * time.Millisecond
+	config.idleTimeout = 30 * time.Millisecond
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 1000; i++ {
@@ -170,13 +173,15 @@ func (suite *ClientSuite) TestIdleTimeout() {
 	if err == nil {
 		assert.NotNil(t, err)
 	} else {
-		assert.Equal(t, "Get "+address+": InvalidHeadersStreamData: NetworkIdleTimeout: No recent network activity.", err.Error())
+		assert.Equal(t,
+			"Get "+config.address+": InvalidHeadersStreamData: NetworkIdleTimeout: No recent network activity.",
+			err.Error())
 	}
 	<-done
 }
 
 func (suite *ClientSuite) TestIdleTimeoutWithDiscreteWrites() {
-	idleTimeout = 30 * time.Millisecond
+	config.idleTimeout = 30 * time.Millisecond
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 10; i++ {
@@ -199,7 +204,7 @@ func (suite *ClientSuite) TestIdleTimeoutWithDiscreteWrites() {
 }
 
 func (suite *ClientSuite) TestUserAgent() {
-	userAgent = "opensema"
+	config.userAgent = "opensema"
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(r.UserAgent()))
 	})
@@ -213,7 +218,7 @@ func (suite *ClientSuite) TestUserAgent() {
 		assert.Nil(t, err, err.Error())
 	} else {
 		assert.Nil(t, err)
-		assert.Equal(t, userAgent, string(b.Bytes()))
+		assert.Equal(t, config.userAgent, string(b.Bytes()))
 	}
 	<-done
 }
@@ -266,7 +271,7 @@ func (suite *ClientSuite) TestReadResponseHeaderInclude() {
 	})
 	done := startServer(handler)
 
-	headersIncluded = true
+	config.headersIncluded = true
 
 	t := suite.T()
 	b := &bytes.Buffer{}
@@ -292,7 +297,7 @@ func (suite *ClientSuite) TestReadResponseHeaderOnly() {
 	})
 	done := startServer(handler)
 
-	headersOnly = true
+	config.headersOnly = true
 
 	t := suite.T()
 	b := &bytes.Buffer{}
@@ -311,7 +316,7 @@ func (suite *ClientSuite) TestReadResponseHeaderOnly() {
 }
 
 func (suite *ClientSuite) TestSendHeader() {
-	customHeaders.Set(" input : blahblah ")
+	config.customHeaders.Set(" input : blahblah ")
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Write(w)
 	})
@@ -331,9 +336,9 @@ func (suite *ClientSuite) TestSendHeader() {
 }
 
 func (suite *ClientSuite) TestSendHeaders() {
-	customHeaders.Set(" input : blahblah ")
-	customHeaders.Set(" this :  value ")
-	customHeaders.Set(" this :  is ok")
+	config.customHeaders.Set(" input : blahblah ")
+	config.customHeaders.Set(" this :  value ")
+	config.customHeaders.Set(" this :  is ok")
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Write(w)
 	})
@@ -350,6 +355,26 @@ func (suite *ClientSuite) TestSendHeaders() {
 		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("Input: blahblah\r\n")))
 		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("This: value\r\n")))
 		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("This: is ok\r\n")))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestURLWithQueryString() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.RequestURI))
+	})
+	done := startServer(handler)
+
+	config.address = addrListened + "/xxx?a=1&b=2"
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Nil(t, err)
+		assert.Equal(t, "/xxx?a=1&b=2", string(b.Bytes()))
 	}
 	<-done
 }

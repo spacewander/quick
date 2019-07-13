@@ -20,9 +20,6 @@ import (
 )
 
 const (
-	defaultConnectTimeout = 1000 * time.Millisecond
-	defaultMaxTime        = 0 // a timeout of zero means no timeout
-
 	version = "0.1-dev"
 )
 
@@ -31,9 +28,6 @@ type headersValue struct {
 }
 
 func (hv *headersValue) String() string {
-	if hv == nil {
-		return ""
-	}
 	var b bytes.Buffer
 	hv.hdr.Write(&b)
 	return string(bytes.TrimSuffix(b.Bytes(), crlf))
@@ -53,7 +47,7 @@ func (hv *headersValue) Set(value string) error {
 	return fmt.Errorf("invalid header: [%s]", value)
 }
 
-var (
+type quickConfig struct {
 	headersOnly     bool
 	headersIncluded bool
 
@@ -69,25 +63,40 @@ var (
 	address string
 
 	userAgent string
+}
+
+func newQuickConfig() *quickConfig {
+	cfg := &quickConfig{
+		// a timeout of zero means no timeout
+		maxTime:        0,
+		connectTimeout: 1000 * time.Millisecond,
+		userAgent:      "quick/" + version,
+		customHeaders:  headersValue{hdr: http.Header{}},
+	}
+	return cfg
+}
+
+var (
+	config = newQuickConfig()
 
 	crlf = []byte{'\r', '\n'}
 )
 
 func init() {
 	timeFmt := ", in the format like 1.5s"
-	flag.BoolVar(&headersIncluded, "i", false, "Include response headers in the output")
-	flag.BoolVar(&headersOnly, "I", false, "Show response headers only")
-	flag.BoolVar(&insecure, "k", false, "Allow connections to SSL sites without certs")
-	flag.DurationVar(&connectTimeout, "connect-timeout", defaultConnectTimeout,
+	flag.BoolVar(&config.headersIncluded, "i", config.headersIncluded, "Include response headers in the output")
+	flag.BoolVar(&config.headersOnly, "I", config.headersOnly, "Show response headers only")
+	flag.BoolVar(&config.insecure, "k", config.insecure, "Allow connections to SSL sites without certs")
+	flag.DurationVar(&config.connectTimeout, "connect-timeout", config.connectTimeout,
 		"Maximum time for the connect operation"+timeFmt)
-	flag.DurationVar(&idleTimeout, "idle-timeout", 0,
+	flag.DurationVar(&config.idleTimeout, "idle-timeout", config.idleTimeout,
 		"Close connection if handshake successfully and no incoming network activity in this duration.\n"+
 			"A reasonable duration will be chosed if not specified.")
-	flag.DurationVar(&maxTime, "max-time", defaultMaxTime,
+	flag.DurationVar(&config.maxTime, "max-time", config.maxTime,
 		"Maximum time for the whole operation"+timeFmt)
-	flag.StringVar(&sni, "sni", "", "Specify the SNI instead of using the host")
-	flag.StringVar(&userAgent, "user-agent", "quick/"+version, "Specify the User-Agent to use")
-	flag.Var(&customHeaders, "H", "Pass custom header(s) to server")
+	flag.StringVar(&config.sni, "sni", config.sni, "Specify the SNI instead of using the host")
+	flag.StringVar(&config.userAgent, "user-agent", config.userAgent, "Specify the User-Agent to use")
+	flag.Var(&config.customHeaders, "H", "Pass custom header(s) to server")
 }
 
 func checkArgs() error {
@@ -109,36 +118,32 @@ func checkArgs() error {
 	if err != nil {
 		return err
 	}
-	if uri.Scheme == "" {
-		uri.Scheme = "https"
-	}
 	if uri.Host == "" || uri.Scheme != "https" {
 		return fmt.Errorf("URL invalid")
 	}
 
-	if sni == "" {
-		sni = uri.Host
+	if config.sni == "" {
+		config.sni = uri.Host
 	}
 
-	if strings.IndexByte(sni, ':') != -1 {
-		hostname, _, err := net.SplitHostPort(sni)
+	if strings.IndexByte(config.sni, ':') != -1 {
+		hostname, _, err := net.SplitHostPort(config.sni)
 		if err != nil {
 			return err
 		}
 
-		sni = hostname
+		config.sni = hostname
 	}
 
 	if uri.Port() == "" {
-		if uri.Scheme == "https" {
-			uri.Host += ":443"
-		} else {
-			return fmt.Errorf("port required in the URL")
-		}
+		uri.Host += ":443"
 	}
 
-	address = uri.String()
+	config.address = uri.String()
 
+	maxTime := config.maxTime
+	connectTimeout := config.connectTimeout
+	idleTimeout := config.idleTimeout
 	if maxTime < 0 {
 		return fmt.Errorf(
 			"invalid argument: -max-time should not be negative, got %v", maxTime)
@@ -160,7 +165,7 @@ func checkArgs() error {
 func dialWithTimeout(network, addr string, tlsCfg *tls.Config,
 	cfg *quic.Config) (sess quic.Session, err error) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), config.connectTimeout)
 	defer cancel()
 
 	done := make(chan struct{})
@@ -198,11 +203,11 @@ func (b *cancellableBody) Close() error {
 }
 func run(out io.Writer) error {
 	quicConf := &quic.Config{
-		IdleTimeout: idleTimeout,
+		IdleTimeout: config.idleTimeout,
 	}
 	tlsConf := &tls.Config{
-		InsecureSkipVerify: insecure,
-		ServerName:         sni,
+		InsecureSkipVerify: config.insecure,
+		ServerName:         config.sni,
 	}
 
 	roundTripper := &h2quic.RoundTripper{
@@ -216,17 +221,17 @@ func run(out io.Writer) error {
 		Transport: roundTripper,
 	}
 
-	req, err := http.NewRequest("GET", address, nil)
+	req, err := http.NewRequest("GET", config.address, nil)
 	var ctx context.Context
-	if maxTime > 0 {
+	if config.maxTime > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(context.Background(), maxTime)
+		ctx, cancel = context.WithTimeout(context.Background(), config.maxTime)
 		defer cancel()
 		req = req.WithContext(ctx)
 	}
 
-	req.Header.Set("User-Agent", userAgent)
-	for k, v := range customHeaders.hdr {
+	req.Header.Set("User-Agent", config.userAgent)
+	for k, v := range config.customHeaders.hdr {
 		req.Header[k] = v
 	}
 
@@ -235,6 +240,8 @@ func run(out io.Writer) error {
 		return err
 	}
 
+	headersIncluded := config.headersIncluded
+	headersOnly := config.headersOnly
 	if headersIncluded || headersOnly {
 		// curl's -i/-I also shows response line, let's follow it
 		io.WriteString(out, resp.Proto+" "+resp.Status)
@@ -263,7 +270,7 @@ func run(out io.Writer) error {
 		out.Write(crlf)
 	}
 
-	if maxTime > 0 {
+	if config.maxTime > 0 {
 		resp.Body = &cancellableBody{
 			rc:  resp.Body,
 			ctx: ctx,
@@ -273,7 +280,8 @@ func run(out io.Writer) error {
 	defer resp.Body.Close()
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to copy the output from %s: %s", address, err.Error())
+		return fmt.Errorf("failed to copy the output from %s: %s",
+			config.address, err.Error())
 	}
 
 	return nil
