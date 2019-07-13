@@ -52,6 +52,7 @@ func TestCheckArgs(t *testing.T) {
 	assertCheckArgs(t, []string{"%@3"}, "parse https://%@3: invalid URL escape \"%\"")
 	assertCheckArgs(t, []string{"quic://test.com"}, "URL invalid")
 	assertCheckArgs(t, []string{}, "no URL specified")
+
 	assertCheckArgs(t, []string{"-max-time", "-1s", "test.com"},
 		"invalid argument: -max-time should not be negative, got -1s")
 	assertCheckArgs(t, []string{"-connect-timeout", "-1s", "test.com"},
@@ -64,6 +65,13 @@ func TestCheckArgs(t *testing.T) {
 		"invalid argument: -max-time should be larger than other timeouts")
 	assertCheckArgs(t, []string{"-idle-timeout", "-1s", "test.com"},
 		"invalid argument: -idle-timeout should not be negative, got -1s")
+
+	assertCheckArgs(t, []string{"-X", "get", "test.com"}, "")
+	assertCheckArgs(t, []string{"-X", "Get", "test.com"}, "")
+	assertCheckArgs(t, []string{"-X", "connect", "test.com"},
+		"invalid argument: method CONNECT is unsupported")
+	assertCheckArgs(t, []string{"-X", "xxx", "test.com"},
+		"invalid argument: unknown method XXX")
 }
 
 func assertCheckSNI(t *testing.T, args []string, expected string) {
@@ -154,4 +162,13 @@ func TestInvalidHeader(t *testing.T) {
 	assert.NotNil(t, config.customHeaders.Set("A:"))
 	assert.NotNil(t, config.customHeaders.Set(":A"))
 	assert.NotNil(t, config.customHeaders.Set(" : "))
+}
+
+func TestEnsureMethodIsUpper(t *testing.T) {
+	defer resetArgs()
+
+	os.Args = []string{"cmd", "-X", "head", "test.com"}
+	err := checkArgs()
+	assert.Nil(t, err)
+	assert.Equal(t, "HEAD", config.method)
 }

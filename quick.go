@@ -63,6 +63,7 @@ type quickConfig struct {
 	address string
 
 	userAgent string
+	method    string
 }
 
 func newQuickConfig() *quickConfig {
@@ -70,8 +71,10 @@ func newQuickConfig() *quickConfig {
 		// a timeout of zero means no timeout
 		maxTime:        0,
 		connectTimeout: 1000 * time.Millisecond,
-		userAgent:      "quick/" + version,
-		customHeaders:  headersValue{hdr: http.Header{}},
+
+		userAgent:     "quick/" + version,
+		customHeaders: headersValue{hdr: http.Header{}},
+		method:        "GET",
 	}
 	return cfg
 }
@@ -83,10 +86,11 @@ var (
 )
 
 func init() {
-	timeFmt := ", in the format like 1.5s"
 	flag.BoolVar(&config.headersIncluded, "i", config.headersIncluded, "Include response headers in the output")
 	flag.BoolVar(&config.headersOnly, "I", config.headersOnly, "Show response headers only")
 	flag.BoolVar(&config.insecure, "k", config.insecure, "Allow connections to SSL sites without certs")
+
+	timeFmt := ", in the format like 1.5s"
 	flag.DurationVar(&config.connectTimeout, "connect-timeout", config.connectTimeout,
 		"Maximum time for the connect operation"+timeFmt)
 	flag.DurationVar(&config.idleTimeout, "idle-timeout", config.idleTimeout,
@@ -94,9 +98,11 @@ func init() {
 			"A reasonable duration will be chosed if not specified or is set to zero.")
 	flag.DurationVar(&config.maxTime, "max-time", config.maxTime,
 		"Maximum time for the whole operation"+timeFmt)
+
 	flag.StringVar(&config.sni, "sni", config.sni, "Specify the SNI instead of using the host")
 	flag.StringVar(&config.userAgent, "user-agent", config.userAgent, "Specify the User-Agent to use")
 	flag.Var(&config.customHeaders, "H", "Pass custom header(s) to server")
+	flag.StringVar(&config.method, "X", config.method, "Specify request method")
 }
 
 func checkArgs() error {
@@ -164,6 +170,16 @@ func checkArgs() error {
 			"invalid argument: -idle-timeout should not be negative, got %v", idleTimeout)
 	}
 
+	config.method = strings.ToUpper(config.method)
+	switch config.method {
+	case "GET", "HEAD", "DELETE":
+	case "CONNECT", "OPTIONS", "POST", "PUT", "PATCH", "TRACE":
+		return fmt.Errorf("invalid argument: method %s is unsupported",
+			config.method)
+	default:
+		return fmt.Errorf("invalid argument: unknown method %s", config.method)
+	}
+
 	return nil
 }
 
@@ -226,7 +242,7 @@ func run(out io.Writer) error {
 		Transport: roundTripper,
 	}
 
-	req, err := http.NewRequest("GET", config.address, nil)
+	req, err := http.NewRequest(config.method, config.address, nil)
 	var ctx context.Context
 	if config.maxTime > 0 {
 		var cancel context.CancelFunc

@@ -104,7 +104,7 @@ func startServer(handler http.Handler) chan struct{} {
 	}()
 
 	// ensure server is started
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	return done
 }
@@ -375,6 +375,74 @@ func (suite *ClientSuite) TestURLWithQueryString() {
 	} else {
 		assert.Nil(t, err)
 		assert.Equal(t, "/xxx?a=1&b=2", string(b.Bytes()))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestReadResponseBodyWithHEAD() {
+	data := bytes.Repeat([]byte("hello world"), 1024)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(data)
+	})
+	done := startServer(handler)
+
+	config.method = "HEAD"
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Nil(t, err)
+		assert.Equal(t, "", string(b.Bytes()))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestReadResponseHeaderOnlyWithHEAD() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("method", r.Method)
+		w.Write(bytes.Repeat([]byte("test"), 1000))
+	})
+	done := startServer(handler)
+
+	config.headersOnly = true
+	config.method = "HEAD"
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Nil(t, err)
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
+		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("Method: HEAD\r\n")))
+		assert.Equal(t, false, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
+		assert.Equal(t, false, bytes.Contains(b.Bytes(), []byte("test")))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestReadResponseBodyWithDELETE() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.Method + " " + r.RequestURI))
+	})
+	done := startServer(handler)
+
+	config.method = "DELETE"
+	config.address += "/users/1"
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Nil(t, err)
+		assert.Equal(t, "DELETE /users/1", string(b.Bytes()))
 	}
 	<-done
 }
