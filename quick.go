@@ -91,7 +91,7 @@ func init() {
 		"Maximum time for the connect operation"+timeFmt)
 	flag.DurationVar(&config.idleTimeout, "idle-timeout", config.idleTimeout,
 		"Close connection if handshake successfully and no incoming network activity in this duration.\n"+
-			"A reasonable duration will be chosed if not specified.")
+			"A reasonable duration will be chosed if not specified or is set to zero.")
 	flag.DurationVar(&config.maxTime, "max-time", config.maxTime,
 		"Maximum time for the whole operation"+timeFmt)
 	flag.StringVar(&config.sni, "sni", config.sni, "Specify the SNI instead of using the host")
@@ -157,6 +157,11 @@ func checkArgs() error {
 	if connectTimeout <= 0 {
 		return fmt.Errorf(
 			"invalid argument: -connect-timeout should be positive, got %v", connectTimeout)
+	}
+
+	if idleTimeout < 0 {
+		return fmt.Errorf(
+			"invalid argument: -idle-timeout should not be negative, got %v", idleTimeout)
 	}
 
 	return nil

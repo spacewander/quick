@@ -104,7 +104,7 @@ func startServer(handler http.Handler) chan struct{} {
 	}()
 
 	// ensure server is started
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
 
 	return done
 }

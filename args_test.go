@@ -62,6 +62,8 @@ func TestCheckArgs(t *testing.T) {
 	assertCheckArgs(t, []string{"-idle-timeout", "1s",
 		"-max-time", "100ms", "test.com"},
 		"invalid argument: -max-time should be larger than other timeouts")
+	assertCheckArgs(t, []string{"-idle-timeout", "-1s", "test.com"},
+		"invalid argument: -idle-timeout should not be negative, got -1s")
 }
 
 func assertCheckSNI(t *testing.T, args []string, expected string) {
