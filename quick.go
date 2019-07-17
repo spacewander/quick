@@ -35,7 +35,8 @@ func (hv *headersValue) String() string {
 
 func (hv *headersValue) Set(value string) error {
 	value = strings.TrimSpace(value)
-	if colon := strings.IndexByte(value, ':'); colon != -1 && 0 < colon && colon < len(value)-1 {
+	if colon := strings.IndexByte(value, ':'); colon != -1 && 0 < colon &&
+		colon < len(value)-1 {
 		// if the provided header contains invalid character like '_',
 		// it will be passed without rejection because it can be accepted by
 		// http.Header.Add.
@@ -86,12 +87,16 @@ var (
 )
 
 func init() {
-	flag.BoolVar(&config.headersIncluded, "i", config.headersIncluded, "Include response headers in the output")
-	flag.BoolVar(&config.headersOnly, "I", config.headersOnly, "Show response headers only")
-	flag.BoolVar(&config.insecure, "k", config.insecure, "Allow connections to SSL sites without certs")
+	flag.BoolVar(&config.headersIncluded, "i", config.headersIncluded,
+		"Include response headers in the output")
+	flag.BoolVar(&config.headersOnly, "I", config.headersOnly,
+		"Show response headers only")
+	flag.BoolVar(&config.insecure, "k", config.insecure,
+		"Allow connections to SSL sites without certs")
 
 	timeFmt := ", in the format like 1.5s"
-	flag.DurationVar(&config.connectTimeout, "connect-timeout", config.connectTimeout,
+	flag.DurationVar(&config.connectTimeout, "connect-timeout",
+		config.connectTimeout,
 		"Maximum time for the connect operation"+timeFmt)
 	flag.DurationVar(&config.idleTimeout, "idle-timeout", config.idleTimeout,
 		"Close connection if handshake successfully and no incoming network activity in this duration.\n"+
@@ -99,10 +104,13 @@ func init() {
 	flag.DurationVar(&config.maxTime, "max-time", config.maxTime,
 		"Maximum time for the whole operation"+timeFmt)
 
-	flag.StringVar(&config.sni, "sni", config.sni, "Specify the SNI instead of using the host")
-	flag.StringVar(&config.userAgent, "user-agent", config.userAgent, "Specify the User-Agent to use")
+	flag.StringVar(&config.sni, "sni", config.sni,
+		"Specify the SNI instead of using the host")
+	flag.StringVar(&config.userAgent, "user-agent", config.userAgent,
+		"Specify the User-Agent to use")
 	flag.Var(&config.customHeaders, "H", "Pass custom header(s) to server")
-	flag.StringVar(&config.method, "X", config.method, "Specify request method")
+	flag.StringVar(&config.method, "X", config.method,
+		"Specify request method")
 }
 
 func checkArgs() error {
@@ -152,7 +160,8 @@ func checkArgs() error {
 	idleTimeout := config.idleTimeout
 	if maxTime < 0 {
 		return fmt.Errorf(
-			"invalid argument: -max-time should not be negative, got %v", maxTime)
+			"invalid argument: -max-time should not be negative, got %v",
+			maxTime)
 	}
 
 	if maxTime != 0 && (maxTime < connectTimeout || maxTime < idleTimeout) {
@@ -162,12 +171,14 @@ func checkArgs() error {
 
 	if connectTimeout <= 0 {
 		return fmt.Errorf(
-			"invalid argument: -connect-timeout should be positive, got %v", connectTimeout)
+			"invalid argument: -connect-timeout should be positive, got %v",
+			connectTimeout)
 	}
 
 	if idleTimeout < 0 {
 		return fmt.Errorf(
-			"invalid argument: -idle-timeout should not be negative, got %v", idleTimeout)
+			"invalid argument: -idle-timeout should not be negative, got %v",
+			idleTimeout)
 	}
 
 	config.method = strings.ToUpper(config.method)
@@ -186,7 +197,8 @@ func checkArgs() error {
 func dialWithTimeout(network, addr string, tlsCfg *tls.Config,
 	cfg *quic.Config) (sess quic.Session, err error) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), config.connectTimeout)
+	ctx, cancel :=
+		context.WithTimeout(context.Background(), config.connectTimeout)
 	defer cancel()
 
 	done := make(chan struct{})

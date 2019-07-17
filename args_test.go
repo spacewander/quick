@@ -1,5 +1,7 @@
 package main
 
+// this file contains tests which are relative with arguments check
+
 import (
 	"os"
 	"reflect"
@@ -18,10 +20,12 @@ func resetArgs() {
 	// referred by the flag.Var.
 	for i := 0; i < aStruct.NumField(); i++ {
 		aField := aStruct.Field(i)
-		aField = reflect.NewAt(aField.Type(), unsafe.Pointer(aField.UnsafeAddr())).Elem()
+		aField = reflect.NewAt(aField.Type(),
+			unsafe.Pointer(aField.UnsafeAddr())).Elem()
 
 		bField := bStruct.Field(i)
-		bField = reflect.NewAt(bField.Type(), unsafe.Pointer(bField.UnsafeAddr())).Elem()
+		bField = reflect.NewAt(bField.Type(),
+			unsafe.Pointer(bField.UnsafeAddr())).Elem()
 
 		aField.Set(bField)
 	}
@@ -49,7 +53,8 @@ func TestCheckArgs(t *testing.T) {
 	assertCheckArgs(t, []string{"/test"}, "URL invalid")
 	assertCheckArgs(t, []string{"http://test.com"}, "URL invalid")
 	assertCheckArgs(t, []string{"https://test.com"}, "")
-	assertCheckArgs(t, []string{"%@3"}, "parse https://%@3: invalid URL escape \"%\"")
+	assertCheckArgs(t, []string{"%@3"},
+		"parse https://%@3: invalid URL escape \"%\"")
 	assertCheckArgs(t, []string{"quic://test.com"}, "URL invalid")
 	assertCheckArgs(t, []string{}, "no URL specified")
 
@@ -127,8 +132,10 @@ func TestCheckAddr(t *testing.T) {
 	assertCheckAddr(t, []string{"127.0.0.1:8000"}, "https://127.0.0.1:8000")
 	assertCheckAddr(t, []string{"https://test.com"}, "https://test.com:443")
 	assertCheckAddr(t, []string{"https://127.0.0.1"}, "https://127.0.0.1:443")
-	assertCheckAddr(t, []string{"https://127.0.0.1:8443"}, "https://127.0.0.1:8443")
-	assertCheckAddr(t, []string{"127.0.0.1:8000/xxx?a=2"}, "https://127.0.0.1:8000/xxx?a=2")
+	assertCheckAddr(t, []string{"https://127.0.0.1:8443"},
+		"https://127.0.0.1:8443")
+	assertCheckAddr(t, []string{"127.0.0.1:8000/xxx?a=2"},
+		"https://127.0.0.1:8000/xxx?a=2")
 }
 
 func assertCheckHeaders(t *testing.T, args []string, expected string) {
@@ -154,7 +161,8 @@ func TestCheckHeaders(t *testing.T) {
 	assertCheckHeaders(t, []string{"-H", "xx : yy"}, "Xx: yy")
 	assertCheckHeaders(t, []string{"-H", "x_x : yy "}, "X_x: yy")
 	assertCheckHeaders(t, []string{"-H", " x_x:yy"}, "X_x: yy")
-	assertCheckHeaders(t, []string{"-H", "A: B", "-H", "B: C", "-H", "A: C"}, "A: B\r\nA: C\r\nB: C")
+	assertCheckHeaders(t, []string{"-H", "A: B", "-H", "B: C", "-H", "A: C"},
+		"A: B\r\nA: C\r\nB: C")
 }
 
 func TestInvalidHeader(t *testing.T) {

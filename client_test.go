@@ -1,5 +1,7 @@
 package main
 
+// this file contains tests which run through between client and server
+
 import (
 	"bytes"
 	"crypto/rand"
@@ -19,7 +21,6 @@ import (
 )
 
 const (
-	// TODO: abort the test if these two ports are occupied
 	addrNotListened = "https://127.0.0.1:11111"
 	addrListened    = "https://127.0.0.1:28443"
 )
@@ -58,12 +59,19 @@ func generateTLSConfig() *tls.Config {
 		panic(err)
 	}
 	template := x509.Certificate{SerialNumber: big.NewInt(1)}
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	certDER, err := x509.CreateCertificate(rand.Reader, &template,
+		&template, &key.PublicKey, key)
 	if err != nil {
 		panic(err)
 	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key)},
+	)
+	certPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certDER,
+	})
 
 	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
@@ -217,7 +225,6 @@ func (suite *ClientSuite) TestUserAgent() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.Nil(t, err)
 		assert.Equal(t, config.userAgent, string(b.Bytes()))
 	}
 	<-done
@@ -236,7 +243,6 @@ func (suite *ClientSuite) TestDefaultUserAgent() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.Nil(t, err)
 		assert.Equal(t, "quick/"+version, string(b.Bytes()))
 	}
 	<-done
@@ -256,7 +262,6 @@ func (suite *ClientSuite) TestReadResponseBody() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.Nil(t, err)
 		assert.Equal(t, string(data), string(b.Bytes()))
 	}
 	<-done
@@ -280,11 +285,10 @@ func (suite *ClientSuite) TestReadResponseHeaderInclude() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.Nil(t, err)
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("Data: "+data+"\r\n")))
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), body))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("Data: "+data+"\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), body))
 	}
 	<-done
 }
@@ -306,11 +310,10 @@ func (suite *ClientSuite) TestReadResponseHeaderOnly() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.Nil(t, err)
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("Data: "+data+"\r\n")))
-		assert.Equal(t, false, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
-		assert.Equal(t, false, bytes.Contains(b.Bytes(), []byte("test")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("Data: "+data+"\r\n")))
+		assert.False(t, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
+		assert.False(t, bytes.Contains(b.Bytes(), []byte("test")))
 	}
 	<-done
 }
@@ -329,8 +332,7 @@ func (suite *ClientSuite) TestSendHeader() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.Nil(t, err)
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("Input: blahblah\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("Input: blahblah\r\n")))
 	}
 	<-done
 }
@@ -351,10 +353,9 @@ func (suite *ClientSuite) TestSendHeaders() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.Nil(t, err)
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("Input: blahblah\r\n")))
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("This: value\r\n")))
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("This: is ok\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("Input: blahblah\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("This: value\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("This: is ok\r\n")))
 	}
 	<-done
 }
@@ -373,7 +374,6 @@ func (suite *ClientSuite) TestURLWithQueryString() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.Nil(t, err)
 		assert.Equal(t, "/xxx?a=1&b=2", string(b.Bytes()))
 	}
 	<-done
@@ -394,7 +394,6 @@ func (suite *ClientSuite) TestReadResponseBodyWithHEAD() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.Nil(t, err)
 		assert.Equal(t, "", string(b.Bytes()))
 	}
 	<-done
@@ -417,11 +416,10 @@ func (suite *ClientSuite) TestReadResponseHeaderOnlyWithHEAD() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.Nil(t, err)
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
-		assert.Equal(t, true, bytes.Contains(b.Bytes(), []byte("Method: HEAD\r\n")))
-		assert.Equal(t, false, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
-		assert.Equal(t, false, bytes.Contains(b.Bytes(), []byte("test")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("Method: HEAD\r\n")))
+		assert.False(t, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
+		assert.False(t, bytes.Contains(b.Bytes(), []byte("test")))
 	}
 	<-done
 }
@@ -441,7 +439,6 @@ func (suite *ClientSuite) TestReadResponseBodyWithDELETE() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.Nil(t, err)
 		assert.Equal(t, "DELETE /users/1", string(b.Bytes()))
 	}
 	<-done
