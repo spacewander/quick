@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"io/ioutil"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -488,6 +489,83 @@ func (suite *ClientSuite) TestDisableRedirect() {
 	} else {
 		assert.True(t,
 			strings.Contains(string(b.Bytes()), "Location: /redirect\r\n"))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestPost() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.Method + " " + r.Header.Get("Content-Type") + " "))
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.Write(body)
+	})
+	done := startServer(handler)
+
+	config.data = "hello world"
+	config.method = "POST"
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		assert.Equal(t, "POST "+defaultContentType+" hello world", string(b.Bytes()))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestPostWithoutBody() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.Method + " " + r.Header.Get("Content-Type")))
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.Write(body)
+	})
+	done := startServer(handler)
+
+	config.method = "POST"
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		assert.Equal(t, "POST "+defaultContentType, string(b.Bytes()))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestGetWithBody() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.Method + " " + r.Header.Get("Content-Type") + " "))
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.Write(body)
+	})
+	done := startServer(handler)
+
+	config.data = "hello world"
+	config.method = "GET"
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		assert.Equal(t, "GET "+defaultContentType+" hello world", string(b.Bytes()))
 	}
 	<-done
 }

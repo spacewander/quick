@@ -189,3 +189,13 @@ func TestNoRedirct(t *testing.T) {
 	assert.Nil(t, err)
 	assert.True(t, config.noRedirect)
 }
+
+func TestWithData(t *testing.T) {
+	defer resetArgs()
+
+	os.Args = []string{"cmd", "-d", "blah blah blah", "test.com"}
+	err := checkArgs()
+	assert.Nil(t, err)
+	assert.Equal(t, "blah blah blah", config.data)
+	assert.Equal(t, "POST", config.method)
+}

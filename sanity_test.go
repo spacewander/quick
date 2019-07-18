@@ -4,6 +4,8 @@ package main
 
 import (
 	"bytes"
+	"io/ioutil"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -40,4 +42,32 @@ func (suite *SanitySuite) TestInjectViaHeader() {
 	} else {
 		assert.Fail(t, "should fail")
 	}
+}
+
+func (suite *SanitySuite) TestOverrideContentType() {
+	config.customHeaders.Set("Content-Type: text/plain")
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.Method + " " + r.Header.Get("Content-Type") + " "))
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.Write(body)
+	})
+	done := startServer(handler)
+
+	config.data = "hello world"
+	config.method = "POST"
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		assert.Equal(t, "POST text/plain hello world", string(b.Bytes()))
+	}
+	<-done
 }

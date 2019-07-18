@@ -21,6 +21,9 @@ import (
 
 const (
 	version = "0.1-dev"
+
+	defaultMethod      = "GET"
+	defaultContentType = "application/json"
 )
 
 type headersValue struct {
@@ -67,6 +70,9 @@ type quickConfig struct {
 
 	userAgent string
 	method    string
+
+	data        string
+	contentType string
 }
 
 func newQuickConfig() *quickConfig {
@@ -77,7 +83,8 @@ func newQuickConfig() *quickConfig {
 
 		userAgent:     "quick/" + version,
 		customHeaders: headersValue{hdr: http.Header{}},
-		method:        "GET",
+
+		contentType: defaultContentType,
 	}
 	return cfg
 }
@@ -114,8 +121,13 @@ func init() {
 	flag.StringVar(&config.userAgent, "user-agent", config.userAgent,
 		"Specify the User-Agent to use")
 	flag.Var(&config.customHeaders, "H", "Pass custom header(s) to server")
-	flag.StringVar(&config.method, "X", config.method,
+	flag.StringVar(&config.method, "X", defaultMethod,
 		"Specify request method")
+	flag.StringVar(&config.data, "d", config.data,
+		"Specify HTTP request body data.\n"+
+			"If the request method is not specified, POST will be used.\n"+
+			"If the Content-Type is not specified, "+config.contentType+
+			" will be used.")
 }
 
 func checkArgs() error {
@@ -186,14 +198,22 @@ func checkArgs() error {
 			idleTimeout)
 	}
 
-	config.method = strings.ToUpper(config.method)
-	switch config.method {
-	case "GET", "HEAD", "DELETE":
-	case "CONNECT", "OPTIONS", "POST", "PUT", "PATCH", "TRACE":
-		return fmt.Errorf("invalid argument: method %s is unsupported",
-			config.method)
-	default:
-		return fmt.Errorf("invalid argument: unknown method %s", config.method)
+	if config.method == "" {
+		if config.data != "" {
+			config.method = "POST"
+		} else {
+			config.method = defaultMethod
+		}
+	} else {
+		config.method = strings.ToUpper(config.method)
+		switch config.method {
+		case "GET", "HEAD", "DELETE", "POST", "PATCH", "PUT":
+		case "CONNECT", "OPTIONS", "TRACE":
+			return fmt.Errorf("invalid argument: method %s is unsupported",
+				config.method)
+		default:
+			return fmt.Errorf("invalid argument: unknown method %s", config.method)
+		}
 	}
 
 	return nil
@@ -268,7 +288,11 @@ func run(out io.Writer) error {
 		hclient.CheckRedirect = noRedirect
 	}
 
-	req, err := http.NewRequest(config.method, config.address, nil)
+	var body io.Reader
+	if config.data != "" {
+		body = strings.NewReader(config.data)
+	}
+	req, err := http.NewRequest(config.method, config.address, body)
 	var ctx context.Context
 	if config.maxTime > 0 {
 		var cancel context.CancelFunc
@@ -278,6 +302,7 @@ func run(out io.Writer) error {
 	}
 
 	req.Header.Set("User-Agent", config.userAgent)
+	req.Header.Set("Content-Type", config.contentType)
 	for k, v := range config.customHeaders.hdr {
 		req.Header[k] = v
 	}
