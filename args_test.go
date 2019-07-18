@@ -180,3 +180,12 @@ func TestEnsureMethodIsUpper(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "HEAD", config.method)
 }
+
+func TestNoRedirct(t *testing.T) {
+	defer resetArgs()
+
+	os.Args = []string{"cmd", "-no-redirect", "test.com"}
+	err := checkArgs()
+	assert.Nil(t, err)
+	assert.True(t, config.noRedirect)
+}

@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -440,6 +441,53 @@ func (suite *ClientSuite) TestReadResponseBodyWithDELETE() {
 		assert.Nil(t, err, err.Error())
 	} else {
 		assert.Equal(t, "DELETE /users/1", string(b.Bytes()))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestEnableRedirectByDefault() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.RequestURI, "/redirect") {
+			w.Write([]byte("done"))
+		} else {
+			http.Redirect(w, r, "/redirect", 302)
+		}
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.Equal(t, "done", string(b.Bytes()))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestDisableRedirect() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.RequestURI, "/redirect") {
+			w.Write([]byte("done"))
+		} else {
+			http.Redirect(w, r, "/redirect", 302)
+		}
+	})
+	done := startServer(handler)
+
+	config.headersOnly = true
+	config.noRedirect = true
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.True(t,
+			strings.Contains(string(b.Bytes()), "Location: /redirect\r\n"))
 	}
 	<-done
 }

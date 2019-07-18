@@ -55,6 +55,8 @@ type quickConfig struct {
 	insecure bool
 	sni      string
 
+	noRedirect bool
+
 	connectTimeout time.Duration
 	idleTimeout    time.Duration
 	maxTime        time.Duration
@@ -93,6 +95,9 @@ func init() {
 		"Show response headers only")
 	flag.BoolVar(&config.insecure, "k", config.insecure,
 		"Allow connections to SSL sites without certs")
+
+	flag.BoolVar(&config.noRedirect, "no-redirect", config.noRedirect,
+		"Don't follow redirect")
 
 	timeFmt := ", in the format like 1.5s"
 	flag.DurationVar(&config.connectTimeout, "connect-timeout",
@@ -234,6 +239,11 @@ func (b *cancellableBody) Close() error {
 	err := b.rc.Close()
 	return err
 }
+
+func noRedirect(req *http.Request, via []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
 func run(out io.Writer) error {
 	quicConf := &quic.Config{
 		IdleTimeout: config.idleTimeout,
@@ -252,6 +262,10 @@ func run(out io.Writer) error {
 
 	hclient := &http.Client{
 		Transport: roundTripper,
+	}
+
+	if config.noRedirect {
+		hclient.CheckRedirect = noRedirect
 	}
 
 	req, err := http.NewRequest(config.method, config.address, nil)
