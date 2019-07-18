@@ -51,6 +51,87 @@ func (hv *headersValue) Set(value string) error {
 	return fmt.Errorf("invalid header: [%s]", value)
 }
 
+type dataValue struct {
+	srcs []string
+}
+
+func (dv *dataValue) String() string {
+	return strings.Join(dv.srcs, " ")
+}
+
+func (dv *dataValue) Set(value string) error {
+	if value == "" {
+		return fmt.Errorf("empty data not allowed")
+	}
+	if value[0] == '@' && len(value) == 1 {
+		return fmt.Errorf("empty file name not allowed")
+	}
+	dv.srcs = append(dv.srcs, value)
+	return nil
+}
+
+func (dv *dataValue) Provided() bool {
+	return len(dv.srcs) > 0
+}
+
+func (dv *dataValue) Open(contentType string) (io.ReadCloser, error) {
+	if len(dv.srcs) == 0 {
+		return nil, nil
+	}
+
+	var readers []io.Reader
+	if contentType == "application/x-www-form-urlencoded" {
+		readers = make([]io.Reader, 2*len(dv.srcs)-1)
+	} else {
+		readers = make([]io.Reader, len(dv.srcs))
+	}
+	j := 0
+	for i, src := range dv.srcs {
+		if i > 0 && contentType == "application/x-www-form-urlencoded" {
+			// for this type, we need to use '&' to concat multiple inputs
+			readers[j] = strings.NewReader("&")
+			j++
+		}
+		if src[0] == '@' {
+			var err error
+			readers[j], err = os.Open(src[1:])
+			if err != nil {
+				for i = 0; i < j; i++ {
+					if rc, ok := readers[i].(io.ReadCloser); ok {
+						rc.Close()
+					}
+				}
+				return nil, err
+			}
+		} else {
+			readers[j] = strings.NewReader(src)
+		}
+		j++
+	}
+	ds := dataSource{
+		io.MultiReader(readers...),
+		nil,
+	}
+	ds.readers = readers
+
+	return ds, nil
+}
+
+type dataSource struct {
+	io.Reader
+	readers []io.Reader
+}
+
+func (ds dataSource) Close() error {
+	for _, r := range ds.readers {
+		if rc, ok := r.(io.ReadCloser); ok {
+			rc.Close()
+			// ignore error since we are going to exit this process
+		}
+	}
+	return nil
+}
+
 type quickConfig struct {
 	headersOnly     bool
 	headersIncluded bool
@@ -71,7 +152,7 @@ type quickConfig struct {
 	userAgent string
 	method    string
 
-	data        string
+	data        dataValue
 	contentType string
 }
 
@@ -123,11 +204,10 @@ func init() {
 	flag.Var(&config.customHeaders, "H", "Pass custom header(s) to server")
 	flag.StringVar(&config.method, "X", defaultMethod,
 		"Specify request method")
-	flag.StringVar(&config.data, "d", config.data,
-		"Specify HTTP request body data.\n"+
-			"If the request method is not specified, POST will be used.\n"+
-			"If the Content-Type is not specified, "+config.contentType+
-			" will be used.")
+	flag.Var(&config.data, "d", "Specify HTTP request body data.\n"+
+		"If the request method is not specified, POST will be used.\n"+
+		"If the Content-Type is not specified via -H, "+config.contentType+
+		" will be used.")
 }
 
 func checkArgs() error {
@@ -199,7 +279,7 @@ func checkArgs() error {
 	}
 
 	if config.method == "" {
-		if config.data != "" {
+		if config.data.Provided() {
 			config.method = "POST"
 		} else {
 			config.method = defaultMethod
@@ -288,11 +368,20 @@ func run(out io.Writer) error {
 		hclient.CheckRedirect = noRedirect
 	}
 
-	var body io.Reader
-	if config.data != "" {
-		body = strings.NewReader(config.data)
+	ct := config.customHeaders.hdr.Get("Content-Type")
+	if ct != "" {
+		config.customHeaders.hdr.Del("Content-Type")
+		config.contentType = ct
 	}
-	req, err := http.NewRequest(config.method, config.address, body)
+	dataSrc, err := config.data.Open(config.contentType)
+	if err != nil {
+		return err
+	}
+	if dataSrc != nil {
+		defer dataSrc.Close()
+	}
+
+	req, err := http.NewRequest(config.method, config.address, dataSrc)
 	var ctx context.Context
 	if config.maxTime > 0 {
 		var cancel context.CancelFunc

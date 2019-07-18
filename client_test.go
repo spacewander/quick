@@ -505,7 +505,7 @@ func (suite *ClientSuite) TestPost() {
 	})
 	done := startServer(handler)
 
-	config.data = "hello world"
+	config.data.Set("hello world")
 	config.method = "POST"
 	t := suite.T()
 	b := &bytes.Buffer{}
@@ -556,7 +556,7 @@ func (suite *ClientSuite) TestGetWithBody() {
 	})
 	done := startServer(handler)
 
-	config.data = "hello world"
+	config.data.Set("hello world")
 	config.method = "GET"
 	t := suite.T()
 	b := &bytes.Buffer{}
