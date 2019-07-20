@@ -9,10 +9,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"io/ioutil"
 	"math/big"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -36,7 +38,7 @@ func (suite *ClientSuite) SetupTest() {
 	config.insecure = true
 }
 
-func TestClientTestSuite(t *testing.T) {
+func TestClientSuite(t *testing.T) {
 	suite.Run(t, new(ClientSuite))
 }
 
@@ -588,4 +590,84 @@ func (suite *ClientSuite) TestOverrideHost() {
 		assert.Equal(t, "www.test.com", string(b.Bytes()))
 	}
 	<-done
+}
+
+func (suite *ClientSuite) TestCookieFromStr() {
+	exp := time.Now().Add(120 * time.Second)
+	var buf [len(http.TimeFormat)]byte
+	expStr := string(exp.UTC().AppendFormat(buf[:0], http.TimeFormat))
+	config.cookie = "name=value; Path=/xxx\n" +
+		"name=value2; Path=/; Expires=" + expStr
+	_, fn := createTmpFile("")
+	defer os.Remove(fn)
+	config.dumpCookie = fn
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{
+			Name:    "key",
+			Expires: exp,
+		})
+		val, err := r.Cookie("name")
+		if err == nil {
+			w.Write([]byte(val.Value))
+		}
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		assert.Equal(t, "value2", string(b.Bytes()))
+	}
+	<-done
+
+	f, _ := os.Open(fn)
+	data, _ := ioutil.ReadAll(f)
+	s := fmt.Sprintf("127.0.0.1\tTRUE\t/xxx\tFALSE\t253402300799\tname\tvalue\n"+
+		"127.0.0.1\tTRUE\t/\tFALSE\t%d\tname\tvalue2\n"+
+		"127.0.0.1\tTRUE\t/\tFALSE\t%d\tkey\t\n", exp.Unix(), exp.Unix())
+	assert.Equal(t, s, string(data))
+}
+
+func (suite *ClientSuite) TestCookieFromFile() {
+	exp := time.Now().Add(120 * time.Second)
+	s := "127.0.0.1\tTRUE\t/\tFALSE\t2094549396\tname\tvalue2\n" +
+		"www.test.com\tTRUE\t/\tFALSE\t2094549396\tname\t\n"
+	_, fn := createTmpFile(s)
+	defer os.Remove(fn)
+	config.loadCookie = fn
+	config.dumpCookie = fn
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{
+			Name:    "key",
+			Value:   "value",
+			Expires: exp,
+			Domain:  "www.google.com",
+		})
+		val, err := r.Cookie("name")
+		if err == nil {
+			w.Write([]byte(val.Value))
+		}
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		assert.Equal(t, "value2", string(b.Bytes()))
+	}
+	<-done
+
+	f, _ := os.Open(fn)
+	data, _ := ioutil.ReadAll(f)
+	assert.Equal(t, s, string(data))
 }

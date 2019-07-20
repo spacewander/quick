@@ -154,6 +154,10 @@ type quickConfig struct {
 
 	data        dataValue
 	contentType string
+
+	cookie     string
+	loadCookie string
+	dumpCookie string
 }
 
 func newQuickConfig() *quickConfig {
@@ -208,6 +212,15 @@ func init() {
 		"If the request method is not specified, POST will be used.\n"+
 		"If the Content-Type is not specified via -H, "+config.contentType+
 		" will be used.")
+
+	flag.StringVar(&config.cookie, "cookie", config.cookie,
+		"Attach cookies to the request.\n"+
+			"The cookies should be in 'name=value; name=value...' format")
+	flag.StringVar(&config.loadCookie, "load-cookie", config.loadCookie,
+		"Load cookies from the given file.\n"+
+			"The file should be in a format described in http://www.cookiecentral.com/faq/#3.5")
+	flag.StringVar(&config.dumpCookie, "dump-cookie", config.dumpCookie,
+		"Write cookies to the given file after operation")
 }
 
 func checkArgs() error {
@@ -296,6 +309,10 @@ func checkArgs() error {
 		}
 	}
 
+	if config.cookie != "" && config.loadCookie != "" {
+		return fmt.Errorf("invalid argument: -cookie can't be used with -load-cookie")
+	}
+
 	return nil
 }
 
@@ -360,7 +377,23 @@ func run(out io.Writer) error {
 	}
 	defer roundTripper.Close()
 
+	cm, err := newCookieManager()
+	if err != nil {
+		return err
+	}
+
+	if config.cookie != "" {
+		err = cm.LoadCookiesForURL(config.address, config.cookie)
+	} else if config.loadCookie != "" {
+		err = cm.Load(config.loadCookie)
+	}
+
+	if err != nil {
+		return err
+	}
+
 	hclient := &http.Client{
+		Jar:       cm.Jar(),
 		Transport: roundTripper,
 	}
 
@@ -402,6 +435,13 @@ func run(out io.Writer) error {
 	resp, err := hclient.Do(req)
 	if err != nil {
 		return err
+	}
+
+	if config.dumpCookie != "" {
+		err = cm.Dump(config.dumpCookie)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to dump cookie: "+err.Error())
+		}
 	}
 
 	headersIncluded := config.headersIncluded

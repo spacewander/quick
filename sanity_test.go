@@ -22,7 +22,7 @@ func (suite *SanitySuite) SetupTest() {
 	config.insecure = true
 }
 
-func TestSanityTestSuite(t *testing.T) {
+func TestSanitySuite(t *testing.T) {
 	suite.Run(t, new(SanitySuite))
 }
 

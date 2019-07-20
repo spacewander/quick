@@ -10,4 +10,5 @@ require (
 
 	// dev dependencies
 	github.com/stretchr/testify v1.3.0
+	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd
 )

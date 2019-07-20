@@ -94,6 +94,9 @@ func TestCheckArgs(t *testing.T) {
 		"invalid argument: method CONNECT is unsupported")
 	assertCheckArgs(t, []string{"-X", "xxx", "test.com"},
 		"invalid argument: unknown method XXX")
+
+	assertCheckArgs(t, []string{"-cookie", "xx=yy", "-load-cookie", "x.txt", "test.com"},
+		"invalid argument: -cookie can't be used with -load-cookie")
 }
 
 func assertCheckSNI(t *testing.T, args []string, expected string) {
@@ -251,11 +254,14 @@ func TestReadData(t *testing.T) {
 		"application/x-www-form-urlencoded")
 
 	_, fn := createTmpFile("c=d")
+	defer os.Remove(fn)
 	assertCheckData(t, []string{"-d", "a=b", "-d", "@" + fn, "-d", "e=f"},
 		"a=b&c=d&e=f", "application/x-www-form-urlencoded")
 
 	_, fn1 := createTmpFile("he")
 	_, fn2 := createTmpFile("wor")
+	defer os.Remove(fn1)
+	defer os.Remove(fn2)
 	assertCheckData(t, []string{"-d", "@" + fn1, "-d", "llo ", "-d", "@" + fn2, "-d", "ld"},
 		"hello world", "text/plain")
 
