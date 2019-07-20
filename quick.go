@@ -415,6 +415,9 @@ func run(out io.Writer) error {
 	}
 
 	req, err := http.NewRequest(config.method, config.address, dataSrc)
+	if err != nil {
+		return err
+	}
 	var ctx context.Context
 	if config.maxTime > 0 {
 		var cancel context.CancelFunc
@@ -458,7 +461,7 @@ func run(out io.Writer) error {
 			i++
 		}
 		// make the output reproducible
-		sort.Sort(sort.StringSlice(headers))
+		sort.Strings(headers)
 		for _, k := range headers {
 			v := resp.Header[k]
 			io.WriteString(out, k+": "+strings.Join(v, ","))

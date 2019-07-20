@@ -2,6 +2,10 @@
 
 Like curl but for HTTP over QUIC
 
+[![Travis](https://travis-ci.org/spacewander/quick.svg?branch=master)](https://travis-ci.org/spacewander/quick)
+[![codecov.io](https://codecov.io/github/spacewander/quick/coverage.svg?branch=master)](https://codecov.io/github/spacewander/quick?branch=master)
+[![license](https://img.shields.io/badge/License-GPLv3-green.svg)](https://github.com/spacewander/quick/blob/master/LICENSE)
+
 ## Which version of QUIC is supported by this tool?
 
 By using `quic-go v0.10.2`, this tool supports gQUIC 39/43/44, which are also

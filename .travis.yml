@@ -1,0 +1,17 @@
+dist: trusty
+
+language: go
+
+go:
+  - "1.12"
+
+env:
+  - GO111MODULE=on
+
+script:
+  - curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.17.1
+  - ./bin/golangci-lint run ./...
+  -  go test -p 1 -coverprofile coverage.txt
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash) -f coverage.txt

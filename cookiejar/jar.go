@@ -408,7 +408,6 @@ func (j *Jar) newEntry(c *http.Cookie, now time.Time, defPath, host string) (e e
 var (
 	errIllegalDomain   = errors.New("cookiejar: illegal cookie domain attribute")
 	errMalformedDomain = errors.New("cookiejar: malformed cookie domain attribute")
-	errNoHostname      = errors.New("cookiejar: no host name available (IP only)")
 )
 
 // endOfTime is the time when session (non-persistent) cookies expire.
@@ -424,9 +423,7 @@ func (j *Jar) domainAndType(host, domain string) (string, bool, error) {
 		return host, true, nil
 	}
 
-	if isIP(host) {
-		// matching IP address is allowed for development
-	}
+	// matching IP address is allowed for development
 
 	// From here on: If the cookie is valid, it is a domain cookie (with
 	// the one exception of a public suffix below).
@@ -486,7 +483,7 @@ func (j *Jar) DumpCookies() (cookies []*http.Cookie) {
 		keys[i] = k
 		i++
 	}
-	sort.Sort(sort.StringSlice(keys))
+	sort.Strings(keys)
 	for _, k := range keys {
 		submap := j.entries[k]
 		var selected []entry
