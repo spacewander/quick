@@ -395,6 +395,9 @@ func run(out io.Writer) error {
 	for k, v := range config.customHeaders.hdr {
 		req.Header[k] = v
 	}
+	if host := req.Header.Get("Host"); host != "" {
+		req.Host = host
+	}
 
 	resp, err := hclient.Do(req)
 	if err != nil {

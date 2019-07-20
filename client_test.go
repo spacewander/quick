@@ -569,3 +569,23 @@ func (suite *ClientSuite) TestGetWithBody() {
 	}
 	<-done
 }
+
+func (suite *ClientSuite) TestOverrideHost() {
+	config.customHeaders.Set("Host: www.test.com")
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.Host))
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		assert.Equal(t, "www.test.com", string(b.Bytes()))
+	}
+	<-done
+}
