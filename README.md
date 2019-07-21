@@ -38,7 +38,7 @@ Run `quick -h` to find more options.
 ## Installation
 
 
-1. Ensure your go version supports go modules
+1. Require Go 1.12
 2. Enable Go modules: `export GO111MODULE=on`
 3. Run `go get -v github.com/spacewander/quick`
 
