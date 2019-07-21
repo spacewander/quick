@@ -9,6 +9,8 @@ env:
   - GO111MODULE=on
 
 script:
+  # Fail the Travis CI build on the first error.
+  - set -e
   - curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.17.1
   - ./bin/golangci-lint run ./...
   -  go test -p 1 -coverprofile coverage.txt
