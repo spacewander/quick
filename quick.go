@@ -178,6 +178,8 @@ var (
 	config = newQuickConfig()
 
 	crlf = []byte{'\r', '\n'}
+
+	showVersion = false
 )
 
 func init() {
@@ -221,10 +223,18 @@ func init() {
 			"The file should be in a format described in http://www.cookiecentral.com/faq/#3.5")
 	flag.StringVar(&config.dumpCookie, "dump-cookie", config.dumpCookie,
 		"Write cookies to the given file after operation")
+
+	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
+
 }
 
 func checkArgs() error {
 	flag.Parse()
+
+	if showVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 
 	if flag.NArg() < 1 {
 		return fmt.Errorf("no URL specified")
