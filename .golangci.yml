@@ -6,6 +6,7 @@ linters:
   disable-all: true
   enable:
     - deadcode
+    - errcheck
     - goimports
     - gosimple
     - ineffassign

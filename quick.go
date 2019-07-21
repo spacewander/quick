@@ -32,7 +32,7 @@ type headersValue struct {
 
 func (hv *headersValue) String() string {
 	var b bytes.Buffer
-	hv.hdr.Write(&b)
+	_ = hv.hdr.Write(&b)
 	return string(bytes.TrimSuffix(b.Bytes(), crlf))
 }
 
@@ -361,6 +361,25 @@ func noRedirect(req *http.Request, via []*http.Request) error {
 	return http.ErrUseLastResponse
 }
 
+func fatal(format string, a ...interface{}) {
+	fmt.Fprintf(os.Stderr, format+"\n", a...)
+	os.Exit(1)
+}
+
+func mustWrite(out io.Writer, p []byte) {
+	_, err := out.Write(p)
+	if err != nil {
+		fatal(err.Error())
+	}
+}
+
+func mustWriteString(out io.Writer, s string) {
+	_, err := io.WriteString(out, s)
+	if err != nil {
+		fatal(err.Error())
+	}
+}
+
 func run(out io.Writer) error {
 	quicConf := &quic.Config{
 		IdleTimeout: config.idleTimeout,
@@ -451,8 +470,8 @@ func run(out io.Writer) error {
 	headersOnly := config.headersOnly
 	if headersIncluded || headersOnly {
 		// curl's -i/-I also shows response line, let's follow it
-		io.WriteString(out, resp.Proto+" "+resp.Status)
-		out.Write(crlf)
+		mustWriteString(out, resp.Proto+" "+resp.Status)
+		mustWrite(out, crlf)
 
 		headers := make([]string, len(resp.Header))
 		i := 0
@@ -464,8 +483,8 @@ func run(out io.Writer) error {
 		sort.Strings(headers)
 		for _, k := range headers {
 			v := resp.Header[k]
-			io.WriteString(out, k+": "+strings.Join(v, ","))
-			out.Write(crlf)
+			mustWriteString(out, k+": "+strings.Join(v, ","))
+			mustWrite(out, crlf)
 		}
 	}
 
@@ -474,7 +493,7 @@ func run(out io.Writer) error {
 	}
 
 	if headersIncluded {
-		out.Write(crlf)
+		mustWrite(out, crlf)
 	}
 
 	if config.maxTime > 0 {
@@ -492,11 +511,6 @@ func run(out io.Writer) error {
 	}
 
 	return nil
-}
-
-func fatal(format string, a ...interface{}) {
-	fmt.Printf(format+"\n", a...)
-	os.Exit(1)
 }
 
 func main() {

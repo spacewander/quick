@@ -68,7 +68,10 @@ func (cm *cookieManager) Load(fn string) error {
 }
 
 func (cm *cookieManager) LoadCookiesForURL(url, cookies string) error {
-	cm.addURL(url)
+	err := cm.addURL(url)
+	if err != nil {
+		return err
+	}
 	return cm.loads(cookies)
 }
 
@@ -213,7 +216,8 @@ func (cm *cookieManager) load(r io.Reader) error {
 				// only https scheme is supported
 				url.Scheme = "https"
 
-				cm.addURL(url.String())
+				// the URL is valid after we parsed the domain
+				_ = cm.addURL(url.String())
 				cm.jar.SetCookies(url, curCookies)
 				// cookiejar.Jar won't own the cookies
 				curCookies = curCookies[:0]
@@ -247,7 +251,7 @@ func (cm *cookieManager) load(r io.Reader) error {
 		url.Path = curPath
 		url.Scheme = "https"
 
-		cm.addURL(url.String())
+		_ = cm.addURL(url.String())
 		cm.jar.SetCookies(url, curCookies)
 	}
 	// we don't need to recover the cookie jar if the scan failed.
@@ -271,6 +275,6 @@ func (cm *cookieManager) loads(s string) error {
 
 func (cm cookieManager) String() string {
 	var b strings.Builder
-	cm.dump(&b, false)
+	_ = cm.dump(&b, false)
 	return b.String()
 }
