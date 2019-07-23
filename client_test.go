@@ -671,3 +671,24 @@ func (suite *ClientSuite) TestCookieFromFile() {
 	data, _ := ioutil.ReadAll(f)
 	assert.Equal(t, s, string(data))
 }
+
+func (suite *ClientSuite) TestMultipleSameHeaders() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("hdr", "first")
+		w.Header().Add("hdr", "second")
+	})
+	done := startServer(handler)
+
+	config.headersOnly = true
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("Hdr: first\r\nHdr: second\r\n")))
+	}
+	<-done
+}

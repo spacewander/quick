@@ -493,8 +493,10 @@ func run(out io.Writer) error {
 		sort.Strings(headers)
 		for _, k := range headers {
 			v := resp.Header[k]
-			mustWriteString(out, k+": "+strings.Join(v, ","))
-			mustWrite(out, crlf)
+			for _, subv := range v {
+				mustWriteString(out, k+": "+subv)
+				mustWrite(out, crlf)
+			}
 		}
 	}
 
