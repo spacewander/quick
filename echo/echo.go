@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"flag"
+	"io"
 	"io/ioutil"
 	"math/big"
 	"net/http"
@@ -16,8 +17,7 @@ import (
 )
 
 var (
-	addrToSNI = map[string]string{}
-	currSNI   = ""
+	currSNI = ""
 )
 
 func storeClientSNI(chi *tls.ClientHelloInfo) (*tls.Config, error) {
@@ -79,24 +79,38 @@ func startServer(addr string, handler http.Handler) {
 	}
 }
 
+func mustWrite(w io.Writer, p []byte) {
+	_, err := w.Write(p)
+	if err != nil {
+		panic(err.Error())
+	}
+}
+
+func mustWriteHeader(w io.Writer, h http.Header) {
+	err := h.Write(w)
+	if err != nil {
+		panic(err.Error())
+	}
+}
+
 func main() {
 	port := ""
 	flag.StringVar(&port, "l", "4443", "the port listened by echo back server")
 	flag.Parse()
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("SNI: " + currSNI + "\r\n"))
-		w.Write([]byte(r.Method + " " + r.RequestURI + " " + r.Proto + "\r\n"))
-		w.Write([]byte("Host: " + r.Host + "\r\n"))
-		r.Header.Write(w)
-		w.Write([]byte("\r\n"))
+		mustWrite(w, []byte("SNI: "+currSNI+"\r\n"))
+		mustWrite(w, []byte(r.Method+" "+r.RequestURI+" "+r.Proto+"\r\n"))
+		mustWrite(w, []byte("Host: "+r.Host+"\r\n"))
+		mustWriteHeader(w, r.Header)
+		mustWrite(w, []byte("\r\n"))
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			w.Write([]byte(err.Error()))
+			mustWrite(w, []byte(err.Error()))
 			return
 		}
-		w.Write(body)
-		r.Trailer.Write(w)
+		mustWrite(w, body)
+		mustWriteHeader(w, r.Trailer)
 	})
 	startServer("https://127.0.0.1:"+port, handler)
 }
