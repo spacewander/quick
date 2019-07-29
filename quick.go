@@ -188,7 +188,7 @@ func init() {
 	flag.BoolVar(&config.headersOnly, "I", config.headersOnly,
 		"Show response headers only")
 	flag.BoolVar(&config.insecure, "k", config.insecure,
-		"Allow connections to SSL sites without certs")
+		"Allow connections to TLS sites without certs")
 
 	flag.BoolVar(&config.noRedirect, "no-redirect", config.noRedirect,
 		"Don't follow redirect")
@@ -213,7 +213,9 @@ func init() {
 	flag.Var(&config.data, "d", "Specify HTTP request body data.\n"+
 		"If the request method is not specified, POST will be used.\n"+
 		"If the Content-Type is not specified via -H, "+config.contentType+
-		" will be used.")
+		" will be used.\n"+
+		"Features like '@file' annotation and multiple body concatenation are supported.\n"+
+		"Read the docs of curl to dive into the details.")
 
 	flag.StringVar(&config.cookie, "cookie", config.cookie,
 		"Attach cookies to the request.\n"+
