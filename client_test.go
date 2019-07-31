@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -626,6 +627,7 @@ func (suite *ClientSuite) TestCookieFromStr() {
 	<-done
 
 	f, _ := os.Open(fn)
+	defer f.Close()
 	data, _ := ioutil.ReadAll(f)
 	s := fmt.Sprintf("127.0.0.1\tTRUE\t/xxx\tFALSE\t253402300799\tname\tvalue\n"+
 		"127.0.0.1\tTRUE\t/\tFALSE\t%d\tname\tvalue2\n"+
@@ -668,6 +670,7 @@ func (suite *ClientSuite) TestCookieFromFile() {
 	<-done
 
 	f, _ := os.Open(fn)
+	defer f.Close()
 	data, _ := ioutil.ReadAll(f)
 	assert.Equal(t, s, string(data))
 }
@@ -689,6 +692,85 @@ func (suite *ClientSuite) TestMultipleSameHeaders() {
 		assert.Nil(t, err, err.Error())
 	} else {
 		assert.True(t, bytes.Contains(b.Bytes(), []byte("Hdr: first\r\nHdr: second\r\n")))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestWriteOutputToFile() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("hdr", "name")
+		w.Write([]byte("abcde"))
+	})
+	done := startServer(handler)
+
+	config.headersIncluded = true
+	dir := createTmpDir()
+	defer os.Remove(dir)
+	fn := filepath.Join(dir, "TestWriteOutputToFile")
+	config.outFilename = fn
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		f, _ := os.Open(fn)
+		defer f.Close()
+		data, _ := ioutil.ReadAll(f)
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("Hdr: name\r\n")))
+		assert.False(t, bytes.Contains(b.Bytes(), []byte("abcde")))
+		assert.Equal(t, "abcde", string(data))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestWriteOutputToFileWhileHeaderOnly() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("hdr", "name")
+		w.Write([]byte("abcde"))
+	})
+	done := startServer(handler)
+
+	config.headersOnly = true
+	dir := createTmpDir()
+	defer os.Remove(dir)
+	fn := filepath.Join(dir, "TestWriteOutputToFileWhileHeaderOnly")
+	config.outFilename = fn
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Nil(t, err, err.Error())
+	} else {
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("Hdr: name\r\n")))
+		assert.False(t, bytes.Contains(b.Bytes(), []byte("abcde")))
+		if _, err := os.Stat(fn); os.IsExist(err) {
+			assert.Fail(t, "should not crerate output file")
+		}
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestFailedToCreateOutputFile() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("abcde"))
+	})
+	done := startServer(handler)
+
+	config.outFilename = "/x/y/z"
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Equal(t, "open /x/y/z: no such file or directory", err.Error())
+	} else {
+		assert.Fail(t, "should fail")
 	}
 	<-done
 }

@@ -48,6 +48,15 @@ func createTmpFile(content string) (f *os.File, fn string) {
 	return tmpfile, tmpfile.Name()
 }
 
+func createTmpDir() (dir string) {
+	dir, err := ioutil.TempDir("", "quick")
+	if err != nil {
+		panic(err)
+	}
+
+	return dir
+}
+
 func assertCheckArgs(t *testing.T, args []string, expectedErrMsg string) {
 	defer resetArgs()
 
@@ -267,4 +276,12 @@ func TestReadData(t *testing.T) {
 
 	assertCheckData(t, []string{"-d", "@" + fn1, "-d", "llo ", "-d", "@non-exist", "-d", "ld"},
 		"open non-exist: no such file or directory", "text/plain")
+}
+
+func TestSetOutputFile(t *testing.T) {
+	defer resetArgs()
+	os.Args = []string{"cmd", "-o", "xxx", "test.com"}
+	err := checkArgs()
+	assert.Nil(t, err)
+	assert.Equal(t, "xxx", config.outFilename)
 }

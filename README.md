@@ -27,7 +27,7 @@ For example:
 
 ```
 quick -H "Content-Type: application/x-www-form-urlencoded" -d @data_file -X PUT \
-    -k 127.0.0.1:8443
+    -k -i -o resp_body.txt 127.0.0.1:8443
 ```
 
 Note that `-X PUT` is used here instead of the curl style `-XPUT` because the

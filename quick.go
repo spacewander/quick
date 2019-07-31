@@ -135,6 +135,7 @@ func (ds dataSource) Close() error {
 type quickConfig struct {
 	headersOnly     bool
 	headersIncluded bool
+	outFilename     string
 
 	insecure bool
 	sni      string
@@ -187,6 +188,8 @@ func init() {
 		"Include response headers in the output")
 	flag.BoolVar(&config.headersOnly, "I", config.headersOnly,
 		"Show response headers only")
+	flag.StringVar(&config.outFilename, "o", config.outFilename,
+		"Write the response body to this file")
 	flag.BoolVar(&config.insecure, "k", config.insecure,
 		"Allow connections to TLS sites without certs")
 
@@ -508,6 +511,17 @@ func run(out io.Writer) error {
 
 	if headersIncluded {
 		mustWrite(out, crlf)
+	}
+
+	outFilename := config.outFilename
+	if outFilename != "" {
+		f, err :=
+			os.OpenFile(outFilename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		out = f
 	}
 
 	if config.maxTime > 0 {
