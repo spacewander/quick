@@ -4,6 +4,7 @@ package main
 
 import (
 	"io/ioutil"
+	"net/http"
 	"os"
 	"reflect"
 	"testing"
@@ -207,7 +208,7 @@ func TestEnsureMethodIsUpper(t *testing.T) {
 	os.Args = []string{"cmd", "-X", "head", "test.com"}
 	err := checkArgs()
 	assert.Nil(t, err)
-	assert.Equal(t, "HEAD", config.method)
+	assert.Equal(t, http.MethodHead, config.method)
 }
 
 func TestNoRedirct(t *testing.T) {
@@ -228,7 +229,7 @@ func TestWithData(t *testing.T) {
 	dataSrc, _ := config.data.Open("")
 	data, _ := ioutil.ReadAll(dataSrc)
 	assert.Equal(t, "blah blah blah", string(data))
-	assert.Equal(t, "POST", config.method)
+	assert.Equal(t, http.MethodPost, config.method)
 }
 
 func TestInvalidData(t *testing.T) {

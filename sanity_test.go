@@ -59,7 +59,7 @@ func (suite *SanitySuite) TestOverrideContentType() {
 	done := startServer(handler)
 
 	config.data.Set("hello world")
-	config.method = "POST"
+	config.method = http.MethodPost
 	t := suite.T()
 	b := &bytes.Buffer{}
 	err := run(b)

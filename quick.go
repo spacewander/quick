@@ -22,8 +22,9 @@ import (
 const (
 	version = "0.1-dev"
 
-	defaultMethod      = "GET"
+	defaultMethod      = http.MethodGet
 	defaultContentType = "application/json"
+	formURLEncoded     = "application/x-www-form-urlencoded"
 )
 
 type headersValue struct {
@@ -80,14 +81,14 @@ func (dv *dataValue) Open(contentType string) (io.ReadCloser, error) {
 	}
 
 	var readers []io.Reader
-	if contentType == "application/x-www-form-urlencoded" {
+	if contentType == formURLEncoded {
 		readers = make([]io.Reader, 2*len(dv.srcs)-1)
 	} else {
 		readers = make([]io.Reader, len(dv.srcs))
 	}
 	j := 0
 	for i, src := range dv.srcs {
-		if i > 0 && contentType == "application/x-www-form-urlencoded" {
+		if i > 0 && contentType == formURLEncoded {
 			// for this type, we need to use '&' to concat multiple inputs
 			readers[j] = strings.NewReader("&")
 			j++
@@ -308,15 +309,16 @@ func checkArgs() error {
 
 	if config.method == "" {
 		if config.data.Provided() {
-			config.method = "POST"
+			config.method = http.MethodPost
 		} else {
 			config.method = defaultMethod
 		}
 	} else {
 		config.method = strings.ToUpper(config.method)
 		switch config.method {
-		case "GET", "HEAD", "DELETE", "POST", "PATCH", "PUT":
-		case "CONNECT", "OPTIONS", "TRACE":
+		case http.MethodGet, http.MethodHead, http.MethodDelete,
+			http.MethodPost, http.MethodPatch, http.MethodPut:
+		case http.MethodConnect, http.MethodOptions, http.MethodTrace:
 			return fmt.Errorf("invalid argument: method %s is unsupported",
 				config.method)
 		default:

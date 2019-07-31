@@ -391,7 +391,7 @@ func (suite *ClientSuite) TestReadResponseBodyWithHEAD() {
 	})
 	done := startServer(handler)
 
-	config.method = "HEAD"
+	config.method = http.MethodHead
 	t := suite.T()
 	b := &bytes.Buffer{}
 	err := run(b)
@@ -412,7 +412,7 @@ func (suite *ClientSuite) TestReadResponseHeaderOnlyWithHEAD() {
 	done := startServer(handler)
 
 	config.headersOnly = true
-	config.method = "HEAD"
+	config.method = http.MethodHead
 
 	t := suite.T()
 	b := &bytes.Buffer{}
@@ -435,7 +435,7 @@ func (suite *ClientSuite) TestReadResponseBodyWithDELETE() {
 	})
 	done := startServer(handler)
 
-	config.method = "DELETE"
+	config.method = http.MethodDelete
 	config.address += "/users/1"
 	t := suite.T()
 	b := &bytes.Buffer{}
@@ -509,7 +509,7 @@ func (suite *ClientSuite) TestPost() {
 	done := startServer(handler)
 
 	config.data.Set("hello world")
-	config.method = "POST"
+	config.method = http.MethodPost
 	t := suite.T()
 	b := &bytes.Buffer{}
 	err := run(b)
@@ -534,7 +534,7 @@ func (suite *ClientSuite) TestPostWithoutBody() {
 	})
 	done := startServer(handler)
 
-	config.method = "POST"
+	config.method = http.MethodPost
 	t := suite.T()
 	b := &bytes.Buffer{}
 	err := run(b)
@@ -560,7 +560,7 @@ func (suite *ClientSuite) TestGetWithBody() {
 	done := startServer(handler)
 
 	config.data.Set("hello world")
-	config.method = "GET"
+	config.method = http.MethodGet
 	t := suite.T()
 	b := &bytes.Buffer{}
 	err := run(b)
