@@ -33,31 +33,6 @@ func resetArgs() {
 	}
 }
 
-func createTmpFile(content string) (f *os.File, fn string) {
-	tmpfile, err := ioutil.TempFile("", "quick")
-	if err != nil {
-		panic(err)
-	}
-
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		panic(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		panic(err)
-	}
-
-	return tmpfile, tmpfile.Name()
-}
-
-func createTmpDir() (dir string) {
-	dir, err := ioutil.TempDir("", "quick")
-	if err != nil {
-		panic(err)
-	}
-
-	return dir
-}
-
 func assertCheckArgs(t *testing.T, args []string, expectedErrMsg string) {
 	defer resetArgs()
 

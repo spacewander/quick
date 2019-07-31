@@ -48,7 +48,7 @@ func newCookieManager() (CookieManager, error) {
 }
 
 func (cm cookieManager) Dump(fn string) error {
-	f, err := os.OpenFile(fn, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := openFileToWrite(fn)
 	if err != nil {
 		return err
 	}

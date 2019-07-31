@@ -517,8 +517,7 @@ func run(out io.Writer) error {
 
 	outFilename := config.outFilename
 	if outFilename != "" {
-		f, err :=
-			os.OpenFile(outFilename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		f, err := openFileToWrite(outFilename)
 		if err != nil {
 			return err
 		}

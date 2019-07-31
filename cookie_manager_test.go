@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -98,7 +99,7 @@ func TestDumpCookieFileNotExists(t *testing.T) {
 	cm := mustNewCookieManager()
 	err := cm.Dump("/non/exist")
 	if err != nil {
-		assert.Equal(t, "open /non/exist: no such file or directory", err.Error())
+		assert.Equal(t, "mkdir /non: permission denied", err.Error())
 		return
 	}
 	assert.NotNil(t, err)
@@ -111,6 +112,26 @@ func TestDumpCookie(t *testing.T) {
 	_, fn := createTmpFile("")
 	defer os.Remove(fn)
 	cm.Dump(fn)
+
+	cm = mustNewCookieManager()
+	cm.Load(fn)
+	actual := cm.String()
+	assert.Equal(t, expect, actual)
+}
+
+func TestDumpCookieFileCreateParentDirs(t *testing.T) {
+	cm := mustNewCookieManager()
+	cm.Load("testdata/cookies.txt")
+	expect := cm.String()
+
+	dir := createTmpDir()
+	defer os.Remove(dir)
+	fn := filepath.Join(dir, "a", "b", "c")
+	err := cm.Dump(fn)
+	if err != nil {
+		assert.Fail(t, err.Error())
+		return
+	}
 
 	cm = mustNewCookieManager()
 	cm.Load(fn)

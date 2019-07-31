@@ -13,21 +13,18 @@ import (
 	"io/ioutil"
 	"math/big"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/h2quic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
 const (
 	addrNotListened = "https://127.0.0.1:11111"
-	addrListened    = "https://127.0.0.1:28443"
 )
 
 type ClientSuite struct {
@@ -83,43 +80,6 @@ func generateTLSConfig() *tls.Config {
 		panic(err)
 	}
 	return &tls.Config{Certificates: []tls.Certificate{tlsCert}}
-}
-
-var (
-	tlsCfg = generateTLSConfig()
-)
-
-func startServer(handler http.Handler) chan struct{} {
-	done := make(chan struct{})
-	go func() {
-		netAddr, err := url.Parse(addrListened)
-		if err != nil {
-			panic(err)
-		}
-
-		server := &h2quic.Server{
-			Server: &http.Server{
-				Addr:    netAddr.Host,
-				Handler: handler,
-			},
-		}
-		server.TLSConfig = tlsCfg
-
-		go func() {
-			server.Serve(nil)
-		}()
-		<-done
-		err = server.Close()
-		if err != nil {
-			panic(err)
-		}
-		close(done)
-	}()
-
-	// ensure server is started
-	time.Sleep(50 * time.Millisecond)
-
-	return done
 }
 
 func (suite *ClientSuite) TestMaxTime() {
@@ -768,9 +728,35 @@ func (suite *ClientSuite) TestFailedToCreateOutputFile() {
 	err := run(b)
 	done <- struct{}{}
 	if err != nil {
-		assert.Equal(t, "open /x/y/z: no such file or directory", err.Error())
+		assert.Equal(t, "mkdir /x: permission denied", err.Error())
 	} else {
 		assert.Fail(t, "should fail")
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestFailedToCreateParentDirs() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("abcde"))
+	})
+	done := startServer(handler)
+
+	dir := createTmpDir()
+	defer os.Remove(dir)
+	fn := filepath.Join(dir, "x", "y", "z")
+	config.outFilename = fn
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		f, _ := os.Open(fn)
+		defer f.Close()
+		data, _ := ioutil.ReadAll(f)
+		assert.Equal(t, "abcde", string(data))
 	}
 	<-done
 }
