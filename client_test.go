@@ -769,7 +769,7 @@ func (suite *ClientSuite) TestResolveWithRedirect() {
 		} else if strings.HasPrefix(r.RequestURI, "/redirect1") {
 			http.Redirect(w, r, "https://test.com:5443/redirect2", 302)
 		} else {
-			http.Redirect(w, r, "https://www.test.com:443/redirect1", 302)
+			http.Redirect(w, r, "https://www.test.com/redirect1", 302)
 		}
 	})
 	done := startServer(handler)

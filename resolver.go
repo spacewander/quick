@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,18 +22,39 @@ func (rv *resolveValue) String() string {
 	return strings.Join(pairs, " ")
 }
 
+const missingPort = "missing port in address"
+
 func (rv *resolveValue) Set(value string) error {
-	res := strings.SplitN(value, ":", 3)
-	if len(res) < 3 {
-		return fmt.Errorf("invalid header: [%s]", value)
+	size := len(value)
+	if size == 0 {
+		return fmt.Errorf("invalid resolve: [%s]", value)
 	}
-	if i, err := strconv.Atoi(res[1]); err != nil || !(0 < i && i < 65536) {
-		return fmt.Errorf("invalid header: [%s]", value)
+	var res []string
+	if value[0] == '[' {
+		right := strings.IndexByte(value, ']')
+		if right == -1 || right >= size-2 {
+			return fmt.Errorf("invalid resolve: [%s]", value)
+		}
+		res = strings.SplitN(value[right+1:], ":", 3)
+		res[0] = value[:right+1]
+	} else {
+		res = strings.SplitN(value, ":", 3)
+	}
+	if len(res) < 3 {
+		return fmt.Errorf("invalid resolve: [%s]", value)
 	}
 
+	if i, err := strconv.Atoi(res[1]); err != nil || !(0 < i && i < 65536) {
+		return fmt.Errorf("invalid resolve: [%s]", value)
+	}
 	src := res[0] + ":" + res[1]
 	var dst string
-	if colon := strings.IndexByte(res[2], ':'); colon == -1 {
+	_, _, err := net.SplitHostPort(res[2])
+	if err != nil {
+		addrErr := err.(*net.AddrError)
+		if addrErr.Err != missingPort {
+			return fmt.Errorf("invalid resolve: [%s]", value)
+		}
 		dst = res[2] + ":" + res[1]
 	} else {
 		dst = res[2]

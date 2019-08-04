@@ -266,9 +266,19 @@ func TestInvalidResolveAddrs(t *testing.T) {
 	assert.NotNil(t, config.revolver.Set("127.0.0.1:www.test.com"))
 	assert.NotNil(t, config.revolver.Set("127.0.0.1:xxx:www.test.com"))
 	assert.NotNil(t, config.revolver.Set("127.0.0.1:0:www.test.com"))
+	assert.NotNil(t, config.revolver.Set(""))
+	assert.NotNil(t, config.revolver.Set("[::1:80:[::1"))
+	assert.NotNil(t, config.revolver.Set("[::1:80:[::1]"))
+	assert.NotNil(t, config.revolver.Set("[::1]:80:[::1"))
 	config.revolver.Set("www.test.com:443:127.0.0.1")
 	config.revolver.Set("www.test.com:443:127.0.0.1:8443")
 	assert.Equal(t, "www.test.com:443:127.0.0.1:8443 www.test.com:443:127.0.0.1:443",
+		config.revolver.String())
+
+	config.revolver = resolveValue{}
+	config.revolver.Set("[::1]:443:[::2]:4445")
+	config.revolver.Set("[::2]:445:[::1]")
+	assert.Equal(t, "[::2]:445:[::1]:445 [::1]:443:[::2]:4445",
 		config.revolver.String())
 }
 
