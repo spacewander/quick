@@ -148,6 +148,7 @@ type quickConfig struct {
 	maxTime        time.Duration
 
 	customHeaders headersValue
+	revolver      resolveValue
 
 	address string
 
@@ -202,8 +203,9 @@ func init() {
 		config.connectTimeout,
 		"Maximum time for the connect operation"+timeFmt)
 	flag.DurationVar(&config.idleTimeout, "idle-timeout", config.idleTimeout,
-		"Close connection if handshake successfully and no incoming network activity in this duration.\n"+
-			"A reasonable duration will be chosed if not specified or is set to zero.")
+		`Close connection if handshake successfully and no incoming network
+activity in this duration. A reasonable duration will be chosed if not specified
+or is set to zero.`)
 	flag.DurationVar(&config.maxTime, "max-time", config.maxTime,
 		"Maximum time for the whole operation"+timeFmt)
 
@@ -212,21 +214,25 @@ func init() {
 	flag.StringVar(&config.userAgent, "user-agent", config.userAgent,
 		"Specify the User-Agent to use")
 	flag.Var(&config.customHeaders, "H", "Pass custom header(s) to server")
+	flag.Var(&config.revolver, "resolve",
+		`Provide a custom address for a specific host and port pair in host:port:address
+format. The address part can contain a new port to use. If the specific URL
+doesn't contain a port, the port of the pair is 443`)
 	flag.StringVar(&config.method, "X", defaultMethod,
 		"Specify request method")
-	flag.Var(&config.data, "d", "Specify HTTP request body data.\n"+
-		"If the request method is not specified, POST will be used.\n"+
-		"If the Content-Type is not specified via -H, "+config.contentType+
-		" will be used.\n"+
-		"Features like '@file' annotation and multiple body concatenation are supported.\n"+
-		"Read the docs of curl to dive into the details.")
+	flag.Var(&config.data, "d", `Specify HTTP request body data.
+If the request method is not specified, POST will be used.
+If the Content-Type is not specified via -H, `+config.contentType+" will be used."+
+		`
+Features like '@file' annotation and multiple body concatenation are supported.
+Read the docs of curl to dive into the details.`)
 
 	flag.StringVar(&config.cookie, "cookie", config.cookie,
-		"Attach cookies to the request.\n"+
-			"The cookies should be in 'name=value; name=value...' format")
+		`Attach cookies to the request. The cookies should be in
+'name=value; name=value...' format`)
 	flag.StringVar(&config.loadCookie, "load-cookie", config.loadCookie,
-		"Load cookies from the given file.\n"+
-			"The file should be in a format described in http://www.cookiecentral.com/faq/#3.5")
+		`Load cookies from the given file. The file should be in a format
+described in http://www.cookiecentral.com/faq/#3.5`)
 	flag.StringVar(&config.dumpCookie, "dump-cookie", config.dumpCookie,
 		"Write cookies to the given file after operation")
 
@@ -278,6 +284,8 @@ func checkArgs() error {
 	if uri.Port() == "" {
 		uri.Host += ":443"
 	}
+
+	uri.Host = resolveAddr(uri.Host, config)
 
 	config.address = uri.String()
 
@@ -435,6 +443,8 @@ func run(out io.Writer) error {
 
 	if config.noRedirect {
 		hclient.CheckRedirect = noRedirect
+	} else {
+		hclient.CheckRedirect = redirectResolved
 	}
 
 	ct := config.customHeaders.hdr.Get("Content-Type")

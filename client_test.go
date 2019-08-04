@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -757,6 +758,34 @@ func (suite *ClientSuite) TestFailedToCreateParentDirs() {
 		defer f.Close()
 		data, _ := ioutil.ReadAll(f)
 		assert.Equal(t, "abcde", string(data))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestResolveWithRedirect() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.RequestURI, "/redirect2") {
+			w.Write([]byte("done"))
+		} else if strings.HasPrefix(r.RequestURI, "/redirect1") {
+			http.Redirect(w, r, "https://test.com:5443/redirect2", 302)
+		} else {
+			http.Redirect(w, r, "https://www.test.com:443/redirect1", 302)
+		}
+	})
+	done := startServer(handler)
+	uri, _ := url.Parse(addrListened)
+	host := uri.Host
+	config.revolver.Set("www.test.com:443:" + host)
+	config.revolver.Set("test.com:5443:" + host)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		assert.Equal(t, "done", string(b.Bytes()))
 	}
 	<-done
 }

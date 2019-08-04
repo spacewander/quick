@@ -261,3 +261,36 @@ func TestSetOutputFile(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "xxx", config.outFilename)
 }
+
+func TestInvalidResolveAddrs(t *testing.T) {
+	assert.NotNil(t, config.revolver.Set("127.0.0.1:www.test.com"))
+	assert.NotNil(t, config.revolver.Set("127.0.0.1:xxx:www.test.com"))
+	assert.NotNil(t, config.revolver.Set("127.0.0.1:0:www.test.com"))
+	config.revolver.Set("www.test.com:443:127.0.0.1")
+	config.revolver.Set("www.test.com:443:127.0.0.1:8443")
+	assert.Equal(t, "www.test.com:443:127.0.0.1:8443 www.test.com:443:127.0.0.1:443",
+		config.revolver.String())
+}
+
+func assertCheckResolver(t *testing.T, args []string, expected string) {
+	defer resetArgs()
+	os.Args = append([]string{"cmd", "-resolve"}, args...)
+	err := checkArgs()
+	if err != nil {
+		assert.Equal(t, expected, err.Error())
+	} else {
+		assert.Equal(t, expected, config.address)
+	}
+}
+
+func TestResolve(t *testing.T) {
+	assertCheckResolver(t, []string{"test.com:443:127.0.0.1", "test.com"},
+		"https://127.0.0.1:443")
+	assertCheckResolver(t, []string{"test.com:443:127.0.0.1", "www.test.com"},
+		"https://www.test.com:443")
+	assertCheckResolver(t, []string{"test.com:8443:127.0.0.1", "test.com"},
+		"https://test.com:443")
+	assertCheckResolver(t, []string{"test.com:8443:127.0.0.1:4443",
+		"-resolve", "test.com:8443:127.0.0.1", "test.com:8443"},
+		"https://127.0.0.1:8443")
+}
