@@ -42,6 +42,17 @@ Run `quick -h` to find more options.
 2. Enable Go modules: `export GO111MODULE=on`
 3. Run `go get -v github.com/spacewander/quick`
 
+## The HTTP3 support of curl is under development, why I need to use this tool?
+
+While curl is trying to support HTTP3 (draft), this tool supports HTTP over QUIC.
+The HTTP over QUIC(gQUIC actually) which is used by Chrome and Caddy can't
+communicate with the HTTP3 (draft). So you might need this tool to send request
+to some HTTP servers use QUIC(gQUIC actually).
+
+Once the HTTP3 is no longer a draft, both curl and this tool will support HTTP3.
+If you want to use the latest version of a command line HTTP3 client, this tool
+is eaiser to install, though building curl from source is easy too.
+
 ## This tool is not the same as curl!
 
 Although I try to mimic curl via providing a group of similar APIs, this tool
