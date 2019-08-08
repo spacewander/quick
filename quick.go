@@ -218,8 +218,7 @@ or is set to zero.`)
 		`Provide a custom address for a specific host and port pair in host:port:address
 format. The address part can contain a new port to use. If the specific URL
 doesn't contain a port, the port of the pair is 443`)
-	flag.StringVar(&config.method, "X", defaultMethod,
-		"Specify request method")
+	flag.StringVar(&config.method, "X", config.method, "Specify request method")
 	flag.Var(&config.data, "d", `Specify HTTP request body data.
 If the request method is not specified, POST will be used.
 If the Content-Type is not specified via -H, `+config.contentType+" will be used."+
