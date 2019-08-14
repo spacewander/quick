@@ -237,6 +237,12 @@ described in http://www.cookiecentral.com/faq/#3.5`)
 
 	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
 
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), `Usage: %s [OPTIONS] URL
+OPTIONS:
+`, os.Args[0])
+		flag.CommandLine.PrintDefaults()
+	}
 }
 
 func checkArgs() error {
