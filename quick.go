@@ -52,87 +52,6 @@ func (hv *headersValue) Set(value string) error {
 	return fmt.Errorf("invalid header: [%s]", value)
 }
 
-type dataValue struct {
-	srcs []string
-}
-
-func (dv *dataValue) String() string {
-	return strings.Join(dv.srcs, " ")
-}
-
-func (dv *dataValue) Set(value string) error {
-	if value == "" {
-		return fmt.Errorf("empty data not allowed")
-	}
-	if value[0] == '@' && len(value) == 1 {
-		return fmt.Errorf("empty file name not allowed")
-	}
-	dv.srcs = append(dv.srcs, value)
-	return nil
-}
-
-func (dv *dataValue) Provided() bool {
-	return len(dv.srcs) > 0
-}
-
-func (dv *dataValue) Open(contentType string) (io.ReadCloser, error) {
-	if len(dv.srcs) == 0 {
-		return nil, nil
-	}
-
-	var readers []io.Reader
-	if contentType == formURLEncoded {
-		readers = make([]io.Reader, 2*len(dv.srcs)-1)
-	} else {
-		readers = make([]io.Reader, len(dv.srcs))
-	}
-	j := 0
-	for i, src := range dv.srcs {
-		if i > 0 && contentType == formURLEncoded {
-			// for this type, we need to use '&' to concat multiple inputs
-			readers[j] = strings.NewReader("&")
-			j++
-		}
-		if src[0] == '@' {
-			var err error
-			readers[j], err = os.Open(src[1:])
-			if err != nil {
-				for i = 0; i < j; i++ {
-					if rc, ok := readers[i].(io.ReadCloser); ok {
-						rc.Close()
-					}
-				}
-				return nil, err
-			}
-		} else {
-			readers[j] = strings.NewReader(src)
-		}
-		j++
-	}
-	ds := dataSource{
-		io.MultiReader(readers...),
-		nil,
-	}
-	ds.readers = readers
-
-	return ds, nil
-}
-
-type dataSource struct {
-	io.Reader
-	readers []io.Reader
-}
-
-func (ds dataSource) Close() error {
-	for _, r := range ds.readers {
-		if rc, ok := r.(io.ReadCloser); ok {
-			rc.Close()
-			// ignore error since we are going to exit this process
-		}
-	}
-	return nil
-}
-
 type quickConfig struct {
 	headersOnly     bool
 	headersIncluded bool
@@ -156,6 +75,7 @@ type quickConfig struct {
 	method    string
 
 	data        dataValue
+	forms       formValue
 	contentType string
 
 	cookie     string
@@ -221,10 +141,16 @@ doesn't contain a port, the port of the pair is 443`)
 	flag.StringVar(&config.method, "X", config.method, "Specify request method")
 	flag.Var(&config.data, "d", `Specify HTTP request body data.
 If the request method is not specified, POST will be used.
-If the Content-Type is not specified via -H, `+config.contentType+" will be used."+
-		`
-Features like '@file' annotation and multiple body concatenation are supported.
+If the Content-Type is not specified via -H, `+config.contentType+" will be used.\n"+
+		`Features like '@file' annotation and multiple body concatenation are supported.
 Read the docs of curl to dive into the details.`)
+	flag.Var(&config.forms, "F", `Send multipart/form-data request.
+If the request method is not specified, POST will be used.
+If the Content-Type is not specified via -H, multipart/form-data will be used.
+Features like '@file' annotation, 'type='/'filename=' keywords are supported.
+Features like 'headers=' keyword are not supported yet.
+Read the docs of curl to dive into the details.
+`)
 
 	flag.StringVar(&config.cookie, "cookie", config.cookie,
 		`Attach cookies to the request. The cookies should be in
@@ -320,8 +246,12 @@ func checkArgs() error {
 			idleTimeout)
 	}
 
+	if config.data.Provided() && config.forms.Provided() {
+		return fmt.Errorf("invalid argument: -d can't be used with -F")
+	}
+
 	if config.method == "" {
-		if config.data.Provided() {
+		if config.data.Provided() || config.forms.Provided() {
 			config.method = http.MethodPost
 		} else {
 			config.method = defaultMethod
@@ -392,8 +322,12 @@ func noRedirect(req *http.Request, via []*http.Request) error {
 }
 
 func fatal(format string, a ...interface{}) {
-	fmt.Fprintf(os.Stderr, format+"\n", a...)
+	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", a...)
 	os.Exit(1)
+}
+
+func warn(format string, a ...interface{}) {
+	fmt.Fprintf(os.Stderr, "Warning: "+format+"\n", a...)
 }
 
 func mustWrite(out io.Writer, p []byte) {
@@ -457,15 +391,22 @@ func run(out io.Writer) error {
 		config.customHeaders.hdr.Del("Content-Type")
 		config.contentType = ct
 	}
-	dataSrc, err := config.data.Open(config.contentType)
-	if err != nil {
-		return err
-	}
-	if dataSrc != nil {
-		defer dataSrc.Close()
+
+	var reqData io.ReadCloser
+	if config.data.Provided() || config.forms.Provided() {
+		if config.data.Provided() {
+			reqData, err = config.data.Open(config.contentType)
+		} else {
+			var ct string
+			reqData, ct, err = config.forms.Open()
+			config.contentType = ct
+		}
+		if err != nil {
+			return err
+		}
 	}
 
-	req, err := http.NewRequest(config.method, config.address, dataSrc)
+	req, err := http.NewRequest(config.method, config.address, reqData)
 	if err != nil {
 		return err
 	}

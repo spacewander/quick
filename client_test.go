@@ -10,9 +10,13 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/big"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -786,6 +790,129 @@ func (suite *ClientSuite) TestResolveWithRedirect() {
 		assert.Fail(t, err.Error())
 	} else {
 		assert.Equal(t, "done", string(b.Bytes()))
+	}
+	<-done
+}
+
+type partData struct {
+	name     string
+	filename string
+	headers  textproto.MIMEHeader
+	body     string
+}
+
+func newPartData(name, filename, contentType, body string) *partData {
+	hdrs := textproto.MIMEHeader{}
+	hdrs.Add("Content-Type", contentType)
+	return &partData{name: name, filename: filename, body: body, headers: hdrs}
+}
+
+func newParDataFromPart(p *multipart.Part) *partData {
+	pd := &partData{}
+	pd.filename = p.FileName()
+	pd.name = p.FormName()
+	p.Header.Del("Content-Disposition")
+	pd.headers = p.Header
+	data, _ := ioutil.ReadAll(p)
+	pd.body = string(data)
+	return pd
+}
+
+func (suite *ClientSuite) TestPostMultipartForm() {
+	var actual []*partData
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ct := r.Header.Get("Content-Type")
+		mt, params, _ := mime.ParseMediaType(ct)
+		w.Write([]byte(r.Method + " " + mt))
+		mr := multipart.NewReader(r.Body, params["boundary"])
+		for {
+			p, err := mr.NextPart()
+			if err == io.EOF {
+				return
+			}
+			actual = append(actual, newParDataFromPart(p))
+		}
+	})
+	done := startServer(handler)
+
+	config.forms.Set(`colors="red;\" green";type=text/plain`)
+	expected := []*partData{
+		newPartData("colors", "", "text/plain", "red;\" green"),
+	}
+	config.method = http.MethodPost
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		assert.Equal(t, "POST multipart/form-data", string(b.Bytes()))
+		assert.Equal(t, expected, actual)
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestPostMultipartFormFile() {
+	var actual []*partData
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ct := r.Header.Get("Content-Type")
+		_, params, _ := mime.ParseMediaType(ct)
+		mr := multipart.NewReader(r.Body, params["boundary"])
+		for {
+			p, err := mr.NextPart()
+			if err == io.EOF {
+				return
+			}
+			actual = append(actual, newParDataFromPart(p))
+		}
+	})
+	done := startServer(handler)
+
+	f, _ := os.Open("testdata/cookies.txt")
+	data, _ := ioutil.ReadAll(f)
+	config.forms.Set(`name=@testdata/cookies.txt; filename=cookies; type=text/plain`)
+	expected := []*partData{
+		newPartData("name", "cookies", "text/plain", string(data)),
+	}
+	config.method = http.MethodPost
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		assert.Equal(t, expected, actual)
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestPostMultipartFormFileNotExist() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ct := r.Header.Get("Content-Type")
+		_, params, _ := mime.ParseMediaType(ct)
+		mr := multipart.NewReader(r.Body, params["boundary"])
+		for {
+			p, err := mr.NextPart()
+			if err == io.EOF {
+				return
+			}
+			io.Copy(ioutil.Discard, p)
+		}
+	})
+	done := startServer(handler)
+
+	config.forms.Set(`name=@path/to/localhost`)
+	config.method = http.MethodPost
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.True(t, strings.HasSuffix(err.Error(), "no such file or directory"))
+	} else {
+		assert.Fail(t, "should fail")
 	}
 	<-done
 }
