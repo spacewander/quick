@@ -148,6 +148,8 @@ Read the docs of curl to dive into the details.`)
 If the request method is not specified, POST will be used.
 If the Content-Type is not specified via -H, multipart/form-data will be used.
 Features like '@file' annotation, 'type='/'filename=' keywords are supported.
+If 'type=' not given, we guess the form's Content-Type according to the
+'filename=' keyword or the filename of the submitted file.
 Features like 'headers=' keyword are not supported yet.
 Read the docs of curl to dive into the details.
 `)

@@ -916,3 +916,38 @@ func (suite *ClientSuite) TestPostMultipartFormFileNotExist() {
 	}
 	<-done
 }
+
+func (suite *ClientSuite) TestPostMultipartFormFileMimeType() {
+	var actual []*partData
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ct := r.Header.Get("Content-Type")
+		_, params, _ := mime.ParseMediaType(ct)
+		mr := multipart.NewReader(r.Body, params["boundary"])
+		for {
+			p, err := mr.NextPart()
+			if err == io.EOF {
+				return
+			}
+			actual = append(actual, newParDataFromPart(p))
+		}
+	})
+	done := startServer(handler)
+
+	f, _ := os.Open("testdata/cookies.txt")
+	data, _ := ioutil.ReadAll(f)
+	config.forms.Set(`name=@testdata/cookies.txt`)
+	expected := []*partData{
+		newPartData("name", "cookies.txt", "text/plain; charset=utf-8", string(data)),
+	}
+	config.method = http.MethodPost
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		assert.Equal(t, expected, actual)
+	}
+	<-done
+}

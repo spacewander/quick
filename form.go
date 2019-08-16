@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/textproto"
 	"os"
@@ -193,10 +194,13 @@ func (fv *formValue) Open() (io.ReadCloser, string, error) {
 	go func() {
 		for _, form := range fv.forms {
 			h := make(textproto.MIMEHeader)
+			extType := ""
 			if form.filename != "" {
 				h.Set("Content-Disposition",
 					fmt.Sprintf(`form-data; name="%s"; filename="%s"`,
 						escapeQuotes(form.name), escapeQuotes(form.filename)))
+				ext := filepath.Ext(form.filename)
+				extType = mime.TypeByExtension(ext)
 			} else {
 				h.Set("Content-Disposition",
 					fmt.Sprintf(`form-data; name="%s"`, escapeQuotes(form.name)))
@@ -204,6 +208,8 @@ func (fv *formValue) Open() (io.ReadCloser, string, error) {
 
 			if form.contentType != "" {
 				h.Set("Content-Type", form.contentType)
+			} else if extType != "" {
+				h.Set("Content-Type", extType)
 			} else if form.fromFile {
 				h.Set("Content-Type", octetStream)
 			}
