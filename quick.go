@@ -141,7 +141,8 @@ doesn't contain a port, the port of the pair is 443`)
 	flag.StringVar(&config.method, "X", config.method, "Specify request method")
 	flag.Var(&config.data, "d", `Specify HTTP request body data.
 If the request method is not specified, POST will be used.
-If the Content-Type is not specified via -H, `+config.contentType+" will be used.\n"+
+If the Content-Type is not specified via -H, we will try to guess the Content-Type if there is
+only one file to submit, otherwise `+config.contentType+" will be used.\n"+
 		`Features like '@file' annotation and multiple body concatenation are supported.
 Read the docs of curl to dive into the details.`)
 	flag.Var(&config.forms, "F", `Send multipart/form-data request.
@@ -396,16 +397,16 @@ func run(out io.Writer) error {
 
 	var reqData io.ReadCloser
 	if config.data.Provided() || config.forms.Provided() {
+		var ct string
 		if config.data.Provided() {
-			reqData, err = config.data.Open(config.contentType)
+			reqData, ct, err = config.data.Open(config.contentType)
 		} else {
-			var ct string
 			reqData, ct, err = config.forms.Open()
-			config.contentType = ct
 		}
 		if err != nil {
 			return err
 		}
+		config.contentType = ct
 	}
 
 	req, err := http.NewRequest(config.method, config.address, reqData)

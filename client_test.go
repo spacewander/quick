@@ -921,7 +921,8 @@ func (suite *ClientSuite) TestPostMultipartFormFileMimeType() {
 	var actual []*partData
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ct := r.Header.Get("Content-Type")
-		_, params, _ := mime.ParseMediaType(ct)
+		mt, params, _ := mime.ParseMediaType(ct)
+		w.Write([]byte(mt))
 		mr := multipart.NewReader(r.Body, params["boundary"])
 		for {
 			p, err := mr.NextPart()
@@ -947,6 +948,7 @@ func (suite *ClientSuite) TestPostMultipartFormFileMimeType() {
 	if err != nil {
 		assert.Fail(t, err.Error())
 	} else {
+		assert.Equal(t, "multipart/form-data", b.String())
 		assert.Equal(t, expected, actual)
 	}
 	<-done

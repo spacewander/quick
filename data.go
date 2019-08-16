@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"io"
+	"mime"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -30,7 +32,7 @@ func (dv *dataValue) Provided() bool {
 	return len(dv.srcs) > 0
 }
 
-func (dv *dataValue) Open(contentType string) (io.ReadCloser, error) {
+func (dv *dataValue) Open(contentType string) (io.ReadCloser, string, error) {
 	var readers []io.Reader
 	if contentType == formURLEncoded {
 		readers = make([]io.Reader, 2*len(dv.srcs)-1)
@@ -38,6 +40,7 @@ func (dv *dataValue) Open(contentType string) (io.ReadCloser, error) {
 		readers = make([]io.Reader, len(dv.srcs))
 	}
 	j := 0
+	extType := ""
 	for i, src := range dv.srcs {
 		if i > 0 && contentType == formURLEncoded {
 			// for this type, we need to use '&' to concat multiple inputs
@@ -46,26 +49,44 @@ func (dv *dataValue) Open(contentType string) (io.ReadCloser, error) {
 		}
 		if src[0] == '@' {
 			var err error
-			readers[j], err = os.Open(src[1:])
+			fn := src[1:]
+			readers[j], err = os.Open(fn)
 			if err != nil {
 				for i = 0; i < j; i++ {
 					if rc, ok := readers[i].(io.ReadCloser); ok {
 						rc.Close()
 					}
 				}
-				return nil, err
+				return nil, "", err
+			}
+
+			if j == 0 {
+				ext := filepath.Ext(fn)
+				extType = mime.TypeByExtension(ext)
 			}
 		} else {
 			readers[j] = strings.NewReader(src)
 		}
 		j++
 	}
-	ds := dataSource{
-		io.MultiReader(readers...),
-		readers,
+
+	var ds dataSource
+	if len(readers) == 1 {
+		ds = dataSource{
+			readers[0],
+			readers,
+		}
+		if extType != "" {
+			contentType = extType
+		}
+	} else {
+		ds = dataSource{
+			io.MultiReader(readers...),
+			readers,
+		}
 	}
 
-	return ds, nil
+	return ds, contentType, nil
 }
 
 type dataSource struct {
