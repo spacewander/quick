@@ -201,3 +201,11 @@ func TestSetOutputFile(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "xxx", config.outFilename)
 }
+
+func TestSetContentType(t *testing.T) {
+	defer resetArgs()
+	os.Args = []string{"cmd", "-H", "Content-Type: xxx", "test.com"}
+	err := checkArgs()
+	assert.Nil(t, err)
+	assert.Equal(t, "xxx", config.contentType)
+}
