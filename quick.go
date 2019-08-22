@@ -276,6 +276,12 @@ func checkArgs() error {
 		return fmt.Errorf("invalid argument: -cookie can't be used with -load-cookie")
 	}
 
+	ct := config.customHeaders.hdr.Get("Content-Type")
+	if ct != "" {
+		config.customHeaders.hdr.Del("Content-Type")
+		config.contentType = ct
+	}
+
 	return nil
 }
 
@@ -347,7 +353,22 @@ func mustWriteString(out io.Writer, s string) {
 	}
 }
 
-func run(out io.Writer) error {
+func createCookieManager() (CookieManager, error) {
+	cm, err := newCookieManager()
+	if err != nil {
+		return nil, err
+	}
+
+	if config.cookie != "" {
+		err = cm.LoadCookiesForURL(config.address, config.cookie)
+	} else if config.loadCookie != "" {
+		err = cm.Load(config.loadCookie)
+	}
+
+	return cm, err
+}
+
+func createClient(cm CookieManager) (*http.Client, error) {
 	quicConf := &quic.Config{
 		IdleTimeout: config.idleTimeout,
 	}
@@ -361,22 +382,6 @@ func run(out io.Writer) error {
 		TLSClientConfig: tlsConf,
 		Dial:            dialWithTimeout,
 	}
-	defer roundTripper.Close()
-
-	cm, err := newCookieManager()
-	if err != nil {
-		return err
-	}
-
-	if config.cookie != "" {
-		err = cm.LoadCookiesForURL(config.address, config.cookie)
-	} else if config.loadCookie != "" {
-		err = cm.Load(config.loadCookie)
-	}
-
-	if err != nil {
-		return err
-	}
 
 	hclient := &http.Client{
 		Jar:       cm.Jar(),
@@ -389,36 +394,34 @@ func run(out io.Writer) error {
 		hclient.CheckRedirect = redirectResolved
 	}
 
-	ct := config.customHeaders.hdr.Get("Content-Type")
-	if ct != "" {
-		config.customHeaders.hdr.Del("Content-Type")
-		config.contentType = ct
-	}
+	return hclient, nil
+}
 
-	var reqData io.ReadCloser
+func destroyClient(hclient *http.Client) {
+	roundTripper := hclient.Transport.(*h2quic.RoundTripper)
+	roundTripper.Close()
+}
+
+func createReq() (*http.Request, context.CancelFunc, error) {
+	var err error
+	var body io.ReadCloser
 	if config.data.Provided() || config.forms.Provided() {
 		var ct string
+		// need to create separate body reader for each request
 		if config.data.Provided() {
-			reqData, ct, err = config.data.Open(config.contentType)
+			body, ct, err = config.data.Open(config.contentType)
 		} else {
-			reqData, ct, err = config.forms.Open()
+			body, ct, err = config.forms.Open()
 		}
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		config.contentType = ct
 	}
 
-	req, err := http.NewRequest(config.method, config.address, reqData)
+	req, err := http.NewRequest(config.method, config.address, body)
 	if err != nil {
-		return err
-	}
-	var ctx context.Context
-	if config.maxTime > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(context.Background(), config.maxTime)
-		defer cancel()
-		req = req.WithContext(ctx)
+		return nil, nil, err
 	}
 
 	req.Header.Set("User-Agent", config.userAgent)
@@ -430,18 +433,17 @@ func run(out io.Writer) error {
 		req.Host = host
 	}
 
-	resp, err := hclient.Do(req)
-	if err != nil {
-		return err
+	var cancel context.CancelFunc
+	if config.maxTime > 0 {
+		var ctx context.Context
+		ctx, cancel = context.WithTimeout(context.Background(), config.maxTime)
+		req = req.WithContext(ctx)
 	}
 
-	if config.dumpCookie != "" {
-		err = cm.Dump(config.dumpCookie)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "failed to dump cookie: "+err.Error())
-		}
-	}
+	return req, cancel, nil
+}
 
+func readResp(req *http.Request, resp *http.Response, out io.Writer) error {
 	headersIncluded := config.headersIncluded
 	headersOnly := config.headersOnly
 	if headersIncluded || headersOnly {
@@ -487,18 +489,53 @@ func run(out io.Writer) error {
 	if config.maxTime > 0 {
 		resp.Body = &cancellableBody{
 			rc:  resp.Body,
-			ctx: ctx,
+			ctx: req.Context(),
 		}
 	}
 
 	defer resp.Body.Close()
-	_, err = io.Copy(out, resp.Body)
+	_, err := io.Copy(out, resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to copy the output from %s: %s",
 			config.address, err.Error())
 	}
 
 	return nil
+}
+
+func run(out io.Writer) error {
+	cm, err := createCookieManager()
+	if err != nil {
+		return err
+	}
+
+	hclient, err := createClient(cm)
+	if err != nil {
+		return err
+	}
+	defer destroyClient(hclient)
+
+	req, cancel, err := createReq()
+	if err != nil {
+		return err
+	}
+	if cancel != nil {
+		defer cancel()
+	}
+
+	resp, err := hclient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if config.dumpCookie != "" {
+		err = cm.Dump(config.dumpCookie)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to dump cookie: "+err.Error())
+		}
+	}
+
+	return readResp(req, resp, out)
 }
 
 func main() {
