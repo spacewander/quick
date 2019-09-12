@@ -286,13 +286,15 @@ func checkArgs() error {
 }
 
 func dialWithTimeout(network, addr string, tlsCfg *tls.Config,
-	cfg *quic.Config) (sess quic.Session, err error) {
+	cfg *quic.Config) (quic.Session, error) {
 
 	ctx, cancel :=
 		context.WithTimeout(context.Background(), config.connectTimeout)
 	defer cancel()
 
 	done := make(chan struct{})
+	var sess quic.Session
+	var err error
 	go func() {
 		sess, err = quic.DialAddrContext(ctx, addr, tlsCfg, cfg)
 		close(done)
@@ -300,11 +302,10 @@ func dialWithTimeout(network, addr string, tlsCfg *tls.Config,
 
 	select {
 	case <-done:
+		return sess, err
 	case <-ctx.Done():
 		return nil, fmt.Errorf("connect timeout")
 	}
-
-	return sess, err
 }
 
 type cancellableBody struct {

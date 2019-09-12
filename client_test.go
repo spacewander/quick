@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -820,11 +821,14 @@ func newParDataFromPart(p *multipart.Part) *partData {
 
 func (suite *ClientSuite) TestPostMultipartForm() {
 	var actual []*partData
+	var lock sync.Mutex
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ct := r.Header.Get("Content-Type")
 		mt, params, _ := mime.ParseMediaType(ct)
 		w.Write([]byte(r.Method + " " + mt))
 		mr := multipart.NewReader(r.Body, params["boundary"])
+		lock.Lock()
+		defer lock.Unlock()
 		for {
 			p, err := mr.NextPart()
 			if err == io.EOF {
@@ -844,6 +848,8 @@ func (suite *ClientSuite) TestPostMultipartForm() {
 	b := &bytes.Buffer{}
 	err := run(b)
 	done <- struct{}{}
+	lock.Lock()
+	defer lock.Unlock()
 	if err != nil {
 		assert.Fail(t, err.Error())
 	} else {
@@ -855,10 +861,13 @@ func (suite *ClientSuite) TestPostMultipartForm() {
 
 func (suite *ClientSuite) TestPostMultipartFormFile() {
 	var actual []*partData
+	var lock sync.Mutex
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ct := r.Header.Get("Content-Type")
 		_, params, _ := mime.ParseMediaType(ct)
 		mr := multipart.NewReader(r.Body, params["boundary"])
+		lock.Lock()
+		defer lock.Unlock()
 		for {
 			p, err := mr.NextPart()
 			if err == io.EOF {
@@ -880,6 +889,8 @@ func (suite *ClientSuite) TestPostMultipartFormFile() {
 	b := &bytes.Buffer{}
 	err := run(b)
 	done <- struct{}{}
+	lock.Lock()
+	defer lock.Unlock()
 	if err != nil {
 		assert.Fail(t, err.Error())
 	} else {
@@ -919,11 +930,14 @@ func (suite *ClientSuite) TestPostMultipartFormFileNotExist() {
 
 func (suite *ClientSuite) TestPostMultipartFormFileMimeType() {
 	var actual []*partData
+	var lock sync.Mutex
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ct := r.Header.Get("Content-Type")
 		mt, params, _ := mime.ParseMediaType(ct)
 		w.Write([]byte(mt))
 		mr := multipart.NewReader(r.Body, params["boundary"])
+		lock.Lock()
+		defer lock.Unlock()
 		for {
 			p, err := mr.NextPart()
 			if err == io.EOF {
@@ -945,6 +959,8 @@ func (suite *ClientSuite) TestPostMultipartFormFileMimeType() {
 	b := &bytes.Buffer{}
 	err := run(b)
 	done <- struct{}{}
+	lock.Lock()
+	defer lock.Unlock()
 	if err != nil {
 		assert.Fail(t, err.Error())
 	} else {
