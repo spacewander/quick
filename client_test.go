@@ -89,8 +89,8 @@ func generateTLSConfig() *tls.Config {
 }
 
 func (suite *ClientSuite) TestMaxTime() {
-	config.connectTimeout = 20 * time.Millisecond
-	config.maxTime = 30 * time.Millisecond
+	config.connectTimeout = 90 * time.Millisecond
+	config.maxTime = 100 * time.Millisecond
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 1000; i++ {
@@ -112,8 +112,8 @@ func (suite *ClientSuite) TestMaxTime() {
 }
 
 func (suite *ClientSuite) TestMaxTimeReadBodyTimeout() {
-	config.connectTimeout = 20 * time.Millisecond
-	config.maxTime = 30 * time.Millisecond
+	config.connectTimeout = 90 * time.Millisecond
+	config.maxTime = 100 * time.Millisecond
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 1000; i++ {
@@ -968,4 +968,47 @@ func (suite *ClientSuite) TestPostMultipartFormFileMimeType() {
 		assert.Equal(t, expected, actual)
 	}
 	<-done
+}
+
+func (suite *ClientSuite) TestBenchmark() {
+	config.bmEnabled = true
+	config.bmDuration = 10 * time.Millisecond
+	config.bmConn = 4
+	config.bmReqPerConn = 2
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("hello world"))
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		output := b.String()
+		assert.True(t, strings.Contains(output, "requests in "))
+		assert.False(t, strings.Contains(output, "Errors:"))
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestBenchmarkErr() {
+	config.address = addrNotListened
+	config.connectTimeout = 10 * time.Millisecond
+	config.bmEnabled = true
+	config.bmDuration = 50 * time.Millisecond
+	config.bmConn = 4
+	config.bmReqPerConn = 2
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		output := b.String()
+		assert.True(t, strings.Contains(output, "Errors:"))
+	}
 }

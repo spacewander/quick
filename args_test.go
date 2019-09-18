@@ -209,3 +209,20 @@ func TestSetContentType(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "xxx", config.contentType)
 }
+
+func TestEnableBenchmakrMode(t *testing.T) {
+	defer resetArgs()
+	os.Args = []string{"cmd", "-bm-duration", "1s", "-bm-req-per-conn", "3", "-bm-conn", "12", "test.com"}
+	err := checkArgs()
+	assert.Nil(t, err)
+	assert.True(t, config.bmEnabled)
+	assert.True(t, config.noRedirect)
+}
+
+func TestCheckArgsWhenBenchmarkModeEnaled(t *testing.T) {
+	bmEnabledArgs := []string{"-bm-duration", "1s", "-bm-req-per-conn", "3", "-bm-conn", "12", "test.com"}
+	assertCheckArgs(t, append([]string{"-I"}, bmEnabledArgs...),
+		"output customization is not allowed in benchmark mode")
+	assertCheckArgs(t, append([]string{"-dump-cookie", "x.txt"}, bmEnabledArgs...),
+		"unsupport option in benchmark mode")
+}

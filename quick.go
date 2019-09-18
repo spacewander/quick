@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
@@ -81,6 +83,11 @@ type quickConfig struct {
 	cookie     string
 	loadCookie string
 	dumpCookie string
+
+	bmDuration   time.Duration
+	bmConn       int
+	bmReqPerConn int
+	bmEnabled    bool
 }
 
 func newQuickConfig() *quickConfig {
@@ -164,6 +171,13 @@ described in http://www.cookiecentral.com/faq/#3.5`)
 	flag.StringVar(&config.dumpCookie, "dump-cookie", config.dumpCookie,
 		"Write cookies to the given file after operation")
 
+	flag.DurationVar(&config.bmDuration, "bm-duration", config.bmDuration,
+		"Duration of the benchmark")
+	flag.IntVar(&config.bmConn, "bm-conn", config.bmConn,
+		"Number of the connections in the benchmark")
+	flag.IntVar(&config.bmReqPerConn, "bm-req-per-conn", config.bmReqPerConn,
+		"Number of the requests to keep in a connection")
+
 	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
 
 	flag.Usage = func() {
@@ -183,7 +197,7 @@ func checkArgs() error {
 	}
 
 	if flag.NArg() < 1 {
-		return fmt.Errorf("no URL specified")
+		return errors.New("no URL specified")
 	}
 
 	rawURL := flag.Arg(0)
@@ -199,7 +213,7 @@ func checkArgs() error {
 		return err
 	}
 	if uri.Host == "" || uri.Scheme != "https" {
-		return fmt.Errorf("URL invalid")
+		return errors.New("URL invalid")
 	}
 
 	if config.sni == "" {
@@ -233,7 +247,7 @@ func checkArgs() error {
 	}
 
 	if maxTime != 0 && (maxTime < connectTimeout || maxTime < idleTimeout) {
-		return fmt.Errorf(
+		return errors.New(
 			"invalid argument: -max-time should be larger than other timeouts")
 	}
 
@@ -250,7 +264,7 @@ func checkArgs() error {
 	}
 
 	if config.data.Provided() && config.forms.Provided() {
-		return fmt.Errorf("invalid argument: -d can't be used with -F")
+		return errors.New("invalid argument: -d can't be used with -F")
 	}
 
 	if config.method == "" {
@@ -273,13 +287,31 @@ func checkArgs() error {
 	}
 
 	if config.cookie != "" && config.loadCookie != "" {
-		return fmt.Errorf("invalid argument: -cookie can't be used with -load-cookie")
+		return errors.New("invalid argument: -cookie can't be used with -load-cookie")
 	}
 
 	ct := config.customHeaders.hdr.Get("Content-Type")
 	if ct != "" {
 		config.customHeaders.hdr.Del("Content-Type")
 		config.contentType = ct
+	}
+
+	if config.bmConn > 0 && config.bmDuration > 0 && config.bmReqPerConn > 0 {
+		config.bmEnabled = true
+	}
+
+	if config.bmEnabled {
+		if config.dumpCookie != "" {
+			return errors.New("unsupport option in benchmark mode")
+		}
+		if config.outFilename != "" || config.headersIncluded || config.headersOnly {
+			return errors.New("output customization is not allowed in benchmark mode")
+		}
+		config.noRedirect = true
+
+		if config.maxTime == 0 {
+			config.maxTime = config.bmDuration
+		}
 	}
 
 	return nil
@@ -304,7 +336,7 @@ func dialWithTimeout(network, addr string, tlsCfg *tls.Config,
 	case <-done:
 		return sess, err
 	case <-ctx.Done():
-		return nil, fmt.Errorf("connect timeout")
+		return nil, errors.New("connect timeout")
 	}
 }
 
@@ -504,12 +536,7 @@ func readResp(req *http.Request, resp *http.Response, out io.Writer) error {
 	return nil
 }
 
-func run(out io.Writer) error {
-	cm, err := createCookieManager()
-	if err != nil {
-		return err
-	}
-
+func runInNormalMode(cm CookieManager, out io.Writer) error {
 	hclient, err := createClient(cm)
 	if err != nil {
 		return err
@@ -537,6 +564,43 @@ func run(out io.Writer) error {
 	}
 
 	return readResp(req, resp, out)
+}
+
+func runInBenchmarkMode(cm CookieManager, out io.Writer) error {
+	conns := make([]*http.Client, config.bmConn)
+	for i := 0; i < config.bmConn; i++ {
+		hclient, err := createClient(cm)
+		if err != nil {
+			return err
+		}
+		defer destroyClient(hclient)
+		conns[i] = hclient
+	}
+
+	stats := make([]bmStat, config.bmConn)
+	var wg sync.WaitGroup
+	wg.Add(config.bmConn)
+	now := time.Now()
+	for i := 0; i < config.bmConn; i++ {
+		go runReqsInParallel(conns[i], &stats[i], &wg)
+	}
+	wg.Wait()
+
+	used := time.Since(now)
+	printStats(used, stats, out)
+	return nil
+}
+
+func run(out io.Writer) error {
+	cm, err := createCookieManager()
+	if err != nil {
+		return err
+	}
+
+	if config.bmEnabled {
+		return runInBenchmarkMode(cm, out)
+	}
+	return runInNormalMode(cm, out)
 }
 
 func main() {
