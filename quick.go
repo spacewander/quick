@@ -246,9 +246,13 @@ func checkArgs() error {
 			maxTime)
 	}
 
-	if maxTime != 0 && (maxTime < connectTimeout || maxTime < idleTimeout) {
-		return errors.New(
-			"invalid argument: -max-time should be larger than other timeouts")
+	if maxTime != 0 {
+		if maxTime < connectTimeout {
+			config.connectTimeout = maxTime
+		}
+		if maxTime < idleTimeout {
+			config.idleTimeout = maxTime
+		}
 	}
 
 	if connectTimeout <= 0 {

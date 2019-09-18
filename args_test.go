@@ -7,6 +7,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/stretchr/testify/assert"
@@ -63,12 +64,6 @@ func TestCheckArgs(t *testing.T) {
 		"invalid argument: -max-time should not be negative, got -1s")
 	assertCheckArgs(t, []string{"-connect-timeout", "-1s", "test.com"},
 		"invalid argument: -connect-timeout should be positive, got -1s")
-	assertCheckArgs(t, []string{"-connect-timeout", "1s",
-		"-max-time", "100ms", "test.com"},
-		"invalid argument: -max-time should be larger than other timeouts")
-	assertCheckArgs(t, []string{"-idle-timeout", "1s",
-		"-max-time", "100ms", "test.com"},
-		"invalid argument: -max-time should be larger than other timeouts")
 	assertCheckArgs(t, []string{"-idle-timeout", "-1s", "test.com"},
 		"invalid argument: -idle-timeout should not be negative, got -1s")
 
@@ -81,6 +76,19 @@ func TestCheckArgs(t *testing.T) {
 
 	assertCheckArgs(t, []string{"-cookie", "xx=yy", "-load-cookie", "x.txt", "test.com"},
 		"invalid argument: -cookie can't be used with -load-cookie")
+}
+
+func TestCheckMaxTime(t *testing.T) {
+	os.Args = []string{"cmd", "-connect-timeout", "1s", "-max-time", "100ms", "test.com"}
+	err := checkArgs()
+	assert.Nil(t, err)
+	assert.Equal(t, 100*time.Millisecond, config.maxTime)
+	assert.Equal(t, 100*time.Millisecond, config.connectTimeout)
+
+	os.Args = []string{"cmd", "-idle-timeout", "1s", "-max-time", "10ms", "test.com"}
+	err = checkArgs()
+	assert.Nil(t, err)
+	assert.Equal(t, 10*time.Millisecond, config.idleTimeout)
 }
 
 func assertCheckSNI(t *testing.T, args []string, expected string) {
