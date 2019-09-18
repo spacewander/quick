@@ -94,7 +94,7 @@ func aggregateStatFromReqCtx(stat *bmStat, ctx *reqCtx) {
 func runReqsInParallel(hclient *http.Client, stat *bmStat, wg *sync.WaitGroup) {
 	defer wg.Done()
 	latch := make(chan struct{}, config.bmReqPerConn)
-	reqCtxCh := make(chan *reqCtx, config.bmReqPerConn)
+	reqCtxCh := make(chan *reqCtx, config.bmReqPerConn*2)
 	timer := time.NewTimer(config.bmDuration)
 
 	var reqWg sync.WaitGroup
@@ -124,9 +124,9 @@ func runReqsInParallel(hclient *http.Client, stat *bmStat, wg *sync.WaitGroup) {
 			failed:
 				reqRes.err = err
 			finished:
-				reqCtxCh <- &reqCtx{&reqRes, cancel}
 				<-latch
 				reqWg.Done()
+				reqCtxCh <- &reqCtx{&reqRes, cancel}
 			}()
 
 		case ctx := <-reqCtxCh:
@@ -135,12 +135,14 @@ func runReqsInParallel(hclient *http.Client, stat *bmStat, wg *sync.WaitGroup) {
 		case <-timer.C:
 			// also count requests which are started but not finished
 			reqWg.Wait()
-			nFinished := len(reqCtxCh)
-			for i := 0; i < nFinished; i++ {
-				ctx := <-reqCtxCh
-				aggregateStatFromReqCtx(stat, ctx)
+			for {
+				select {
+				case ctx := <-reqCtxCh:
+					aggregateStatFromReqCtx(stat, ctx)
+				default:
+					return
+				}
 			}
-			return
 		}
 	}
 }
