@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -970,12 +971,14 @@ func (suite *ClientSuite) TestPostMultipartFormFileMimeType() {
 	<-done
 }
 
-func (suite *ClientSuite) TestBenchmark() {
+func (suite *ClientSuite) TestBenchmarkOK() {
 	config.bmEnabled = true
-	config.bmDuration = 10 * time.Millisecond
+	config.bmDuration = 100 * time.Millisecond
 	config.bmConn = 4
 	config.bmReqPerConn = 2
+	count := int32(0)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&count, 1)
 		w.Write([]byte("hello world"))
 	})
 	done := startServer(handler)
@@ -988,7 +991,7 @@ func (suite *ClientSuite) TestBenchmark() {
 		assert.Fail(t, err.Error())
 	} else {
 		output := b.String()
-		assert.True(t, strings.Contains(output, "requests in "))
+		assert.True(t, strings.Contains(output, fmt.Sprintf("%d requests in ", count)))
 		assert.False(t, strings.Contains(output, "Errors:"))
 	}
 	<-done
@@ -1011,4 +1014,31 @@ func (suite *ClientSuite) TestBenchmarkErr() {
 		output := b.String()
 		assert.True(t, strings.Contains(output, "Errors:"))
 	}
+}
+
+func (suite *ClientSuite) TestBenchmarkBadStatusCode() {
+	config.bmEnabled = true
+	config.bmDuration = 100 * time.Millisecond
+	config.bmConn = 2
+	config.bmReqPerConn = 1
+	count := int32(0)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&count, 1)
+		w.WriteHeader(404)
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		output := b.String()
+		assert.True(t, strings.Contains(output, "requests in "))
+		assert.False(t, strings.Contains(output, "Errors:"))
+		assert.True(t, strings.Contains(output, fmt.Sprintf("Non-2xx or 3xx responses: %d", count)))
+	}
+	<-done
 }

@@ -11,8 +11,9 @@ import (
 )
 
 type bmStat struct {
-	errs map[string]int
-	reqs int64
+	errs          map[string]int
+	reqs          int64
+	badStatusCode int64
 }
 
 func (bs *bmStat) AddErr(err error) {
@@ -28,7 +29,10 @@ func (bs *bmStat) AddErr(err error) {
 	}
 }
 
-func (bs *bmStat) MergeErr(other *bmStat) {
+func (bs *bmStat) Merge(other *bmStat) {
+	bs.reqs += other.reqs
+	bs.badStatusCode += other.badStatusCode
+
 	if other.errs == nil {
 		return
 	}
@@ -56,23 +60,35 @@ func (bs *bmStat) PrintErr(out io.Writer) {
 	}
 }
 
+func (bs *bmStat) PrintBadStatusCode(out io.Writer) {
+	if bs.badStatusCode == 0 {
+		return
+	}
+	fmt.Fprintf(out, "  Non-2xx or 3xx responses: %d\n", bs.badStatusCode)
+}
+
 func (bs *bmStat) IncrReq() {
 	bs.reqs++
+}
+
+func (bs *bmStat) IncrBadStatusCode() {
+	bs.badStatusCode++
 }
 
 func printStats(timeUsed time.Duration, stats []bmStat, out io.Writer) {
 	total := &bmStat{}
 	for _, stat := range stats {
-		total.reqs += stat.reqs
-		total.MergeErr(&stat)
+		total.Merge(&stat)
 	}
 	fmt.Fprintf(out, "  %d requests in %v\n", total.reqs, timeUsed)
+	total.PrintBadStatusCode(out)
 	total.PrintErr(out)
 	fmt.Fprintf(out, "Requests/sec:    %f\n", float64(total.reqs)/timeUsed.Seconds())
 }
 
 type reqResult struct {
-	err error
+	err        error
+	statusCode int
 }
 
 type reqCtx struct {
@@ -89,6 +105,9 @@ func aggregateStatFromReqCtx(stat *bmStat, ctx *reqCtx) {
 	stat.IncrReq()
 	if res.err != nil {
 		stat.AddErr(res.err)
+	}
+	if res.statusCode < 200 || res.statusCode >= 400 {
+		stat.IncrBadStatusCode()
 	}
 }
 
@@ -123,6 +142,7 @@ func runReqsInParallel(hclient *http.Client, stat *bmStat, wg *sync.WaitGroup,
 					goto failed
 				}
 
+				reqRes.statusCode = resp.StatusCode
 				goto finished
 			failed:
 				reqRes.err = err
