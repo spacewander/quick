@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
 	"sync"
@@ -571,6 +572,14 @@ func runInNormalMode(cm CookieManager, out io.Writer) error {
 }
 
 func runInBenchmarkMode(cm CookieManager, out io.Writer) error {
+	fmt.Fprintf(out,
+		"Running %v test @ %s\n  %d connections and %d requests per connection\n",
+		config.bmDuration,
+		config.address,
+		config.bmConn,
+		config.bmReqPerConn,
+	)
+
 	conns := make([]*http.Client, config.bmConn)
 	for i := 0; i < config.bmConn; i++ {
 		hclient, err := createClient(cm)
@@ -582,11 +591,19 @@ func runInBenchmarkMode(cm CookieManager, out io.Writer) error {
 	}
 
 	stats := make([]bmStat, config.bmConn)
+	cancelled := make(chan struct{})
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		<-c
+		close(cancelled)
+	}()
+
 	var wg sync.WaitGroup
 	wg.Add(config.bmConn)
 	now := time.Now()
 	for i := 0; i < config.bmConn; i++ {
-		go runReqsInParallel(conns[i], &stats[i], &wg)
+		go runReqsInParallel(conns[i], &stats[i], &wg, cancelled)
 	}
 	wg.Wait()
 

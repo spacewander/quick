@@ -50,7 +50,7 @@ func (bs *bmStat) PrintErr(out io.Writer) {
 	if bs.errs == nil {
 		return
 	}
-	fmt.Fprintf(out, "Errors:\n")
+	fmt.Fprintf(out, "  Errors:\n")
 	for n, c := range bs.errs {
 		fmt.Fprintf(out, "\t%s\t%d\n", n, c)
 	}
@@ -66,8 +66,9 @@ func printStats(timeUsed time.Duration, stats []bmStat, out io.Writer) {
 		total.reqs += stat.reqs
 		total.MergeErr(&stat)
 	}
-	fmt.Fprintf(out, "%d requests in %v\n", total.reqs, timeUsed)
+	fmt.Fprintf(out, "  %d requests in %v\n", total.reqs, timeUsed)
 	total.PrintErr(out)
+	fmt.Fprintf(out, "Requests/sec:    %f\n", float64(total.reqs)/timeUsed.Seconds())
 }
 
 type reqResult struct {
@@ -91,7 +92,9 @@ func aggregateStatFromReqCtx(stat *bmStat, ctx *reqCtx) {
 	}
 }
 
-func runReqsInParallel(hclient *http.Client, stat *bmStat, wg *sync.WaitGroup) {
+func runReqsInParallel(hclient *http.Client, stat *bmStat, wg *sync.WaitGroup,
+	cancelled <-chan struct{}) {
+
 	defer wg.Done()
 	latch := make(chan struct{}, config.bmReqPerConn)
 	reqCtxCh := make(chan *reqCtx, config.bmReqPerConn*2)
@@ -140,9 +143,14 @@ func runReqsInParallel(hclient *http.Client, stat *bmStat, wg *sync.WaitGroup) {
 				case ctx := <-reqCtxCh:
 					aggregateStatFromReqCtx(stat, ctx)
 				default:
-					return
+					goto endloop
 				}
 			}
+
+		case <-cancelled:
+			// don't wait started requests if cancelled
+			goto endloop
 		}
 	}
+endloop:
 }
