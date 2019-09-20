@@ -19,7 +19,7 @@ type bmStat struct {
 	latency       *hdrhistogram.Histogram
 }
 
-func NewBmStat() *bmStat {
+func newBmStat() *bmStat {
 	return &bmStat{
 		latency: hdrhistogram.New(0, int64(config.bmDuration), 5),
 	}
@@ -167,14 +167,17 @@ func aggregateStatFromReqCtx(stat *bmStat, ctx *reqCtx) {
 		stat.IncrBadStatusCode()
 	}
 	// count latency even when the request failed (connect/read timeout, etc.)
-	stat.latency.RecordValue(int64(res.time))
+	err := stat.latency.RecordValue(int64(res.time))
+	if err != nil {
+		warn(err.Error())
+	}
 }
 
 func runReqsInParallel(hclient *http.Client, pStat **bmStat, wg *sync.WaitGroup,
 	cancelled <-chan struct{}) {
 
 	defer wg.Done()
-	stat := NewBmStat()
+	stat := newBmStat()
 	*pStat = stat
 	latch := make(chan struct{}, config.bmReqPerConn)
 	reqCtxCh := make(chan *reqCtx, config.bmReqPerConn*2)
