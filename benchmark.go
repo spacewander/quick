@@ -8,12 +8,21 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/zoidbergwill/hdrhistogram"
 )
 
 type bmStat struct {
 	errs          map[string]int
 	reqs          int64
 	badStatusCode int64
+	latency       *hdrhistogram.Histogram
+}
+
+func NewBmStat() *bmStat {
+	return &bmStat{
+		latency: hdrhistogram.New(0, int64(config.bmDuration), 5),
+	}
 }
 
 func (bs *bmStat) AddErr(err error) {
@@ -32,6 +41,7 @@ func (bs *bmStat) AddErr(err error) {
 func (bs *bmStat) Merge(other *bmStat) {
 	bs.reqs += other.reqs
 	bs.badStatusCode += other.badStatusCode
+	bs.latency.Merge(other.latency)
 
 	if other.errs == nil {
 		return
@@ -60,6 +70,52 @@ func (bs *bmStat) PrintErr(out io.Writer) {
 	}
 }
 
+func formatLatencyDuration(v float64) string {
+	return time.Duration(v).Round(10 * time.Microsecond).String()
+}
+
+func (bs *bmStat) PrintLatency(out io.Writer) {
+	lat := bs.latency
+	avg := lat.Mean()
+	stdev := lat.StdDev()
+	max := lat.Max()
+	up := int64(avg + stdev)
+	low := int64(avg - stdev)
+
+	count := int64(0)
+	// use the leftmost value(From) to represent the range
+	for _, bar := range lat.Distribution() {
+		if bar.From >= up {
+			break
+		}
+		if bar.From >= low {
+			count += bar.Count
+		}
+	}
+	inStdevRate := float64(count*10000/bs.reqs) / 100
+
+	table := [][]string{
+		{"Item", "Avg", "Stdev", "Max", "+/-Stdev"},
+		{"Latency",
+			formatLatencyDuration(avg),
+			formatLatencyDuration(stdev),
+			formatLatencyDuration(float64(max)),
+			fmt.Sprintf("%0.2f%%", inStdevRate),
+		},
+		// Is Req/s distribution important enough?
+	}
+	for _, row := range table {
+		fmt.Fprintf(out, "  %10s %8s %10s %9s %10s\n",
+			row[0], row[1], row[2], row[3], row[4])
+	}
+	fmt.Fprintln(out, "  Latency Distribution")
+	percents := []float64{50, 75, 90, 95, 99, 99.5, 99.9}
+	for _, p := range percents {
+		fmt.Fprintf(out, "    %0.1f%%\t%s\n", p,
+			formatLatencyDuration(float64(lat.ValueAtQuantile(p))))
+	}
+}
+
 func (bs *bmStat) PrintBadStatusCode(out io.Writer) {
 	if bs.badStatusCode == 0 {
 		return
@@ -75,12 +131,13 @@ func (bs *bmStat) IncrBadStatusCode() {
 	bs.badStatusCode++
 }
 
-func printStats(timeUsed time.Duration, stats []bmStat, out io.Writer) {
-	total := &bmStat{}
-	for _, stat := range stats {
-		total.Merge(&stat)
+func printStats(timeUsed time.Duration, stats []*bmStat, out io.Writer) {
+	total := stats[0]
+	for i := 1; i < len(stats); i++ {
+		total.Merge(stats[i])
 	}
 	fmt.Fprintf(out, "  %d requests in %v\n", total.reqs, timeUsed)
+	total.PrintLatency(out)
 	total.PrintBadStatusCode(out)
 	total.PrintErr(out)
 	fmt.Fprintf(out, "Requests/sec:    %f\n", float64(total.reqs)/timeUsed.Seconds())
@@ -89,6 +146,7 @@ func printStats(timeUsed time.Duration, stats []bmStat, out io.Writer) {
 type reqResult struct {
 	err        error
 	statusCode int
+	time       time.Duration
 }
 
 type reqCtx struct {
@@ -105,16 +163,19 @@ func aggregateStatFromReqCtx(stat *bmStat, ctx *reqCtx) {
 	stat.IncrReq()
 	if res.err != nil {
 		stat.AddErr(res.err)
-	}
-	if res.statusCode < 200 || res.statusCode >= 400 {
+	} else if res.statusCode < 200 || res.statusCode >= 400 {
 		stat.IncrBadStatusCode()
 	}
+	// count latency even when the request failed (connect/read timeout, etc.)
+	stat.latency.RecordValue(int64(res.time))
 }
 
-func runReqsInParallel(hclient *http.Client, stat *bmStat, wg *sync.WaitGroup,
+func runReqsInParallel(hclient *http.Client, pStat **bmStat, wg *sync.WaitGroup,
 	cancelled <-chan struct{}) {
 
 	defer wg.Done()
+	stat := NewBmStat()
+	*pStat = stat
 	latch := make(chan struct{}, config.bmReqPerConn)
 	reqCtxCh := make(chan *reqCtx, config.bmReqPerConn*2)
 	timer := time.NewTimer(config.bmDuration)
@@ -132,6 +193,7 @@ func runReqsInParallel(hclient *http.Client, stat *bmStat, wg *sync.WaitGroup,
 					fatal(err.Error())
 				}
 
+				reqStart := time.Now()
 				resp, err := hclient.Do(req)
 				if err != nil {
 					goto failed
@@ -147,6 +209,7 @@ func runReqsInParallel(hclient *http.Client, stat *bmStat, wg *sync.WaitGroup,
 			failed:
 				reqRes.err = err
 			finished:
+				reqRes.time = time.Since(reqStart)
 				<-latch
 				reqWg.Done()
 				reqCtxCh <- &reqCtx{&reqRes, cancel}

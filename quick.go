@@ -590,7 +590,7 @@ func runInBenchmarkMode(cm CookieManager, out io.Writer) error {
 		conns[i] = hclient
 	}
 
-	stats := make([]bmStat, config.bmConn)
+	stats := make([]*bmStat, config.bmConn)
 	cancelled := make(chan struct{})
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
