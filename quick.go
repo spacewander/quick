@@ -194,6 +194,11 @@ func checkArgs() error {
 
 	if showVersion {
 		fmt.Println(version)
+		versions := make([]string, len(SupportedVersions))
+		for i := range versions {
+			versions[i] = SupportedVersions[i].String()
+		}
+		fmt.Printf("Supported QUIC versions: %s\n", strings.Join(versions, ", "))
 		os.Exit(0)
 	}
 
