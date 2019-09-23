@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"sort"
 	"strings"
 	"sync"
@@ -187,7 +188,11 @@ OPTIONS:
 `, os.Args[0])
 		flag.CommandLine.PrintDefaults()
 	}
+
 }
+
+// for developer
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 
 func checkArgs() error {
 	flag.Parse()
@@ -445,7 +450,7 @@ func destroyClient(hclient *http.Client) {
 	roundTripper.Close()
 }
 
-func createReq() (*http.Request, context.CancelFunc, error) {
+func createReq(oldReq *http.Request) (*http.Request, context.CancelFunc, error) {
 	var err error
 	var body io.ReadCloser
 	if config.data.Provided() || config.forms.Provided() {
@@ -462,18 +467,23 @@ func createReq() (*http.Request, context.CancelFunc, error) {
 		config.contentType = ct
 	}
 
-	req, err := http.NewRequest(config.method, config.address, body)
-	if err != nil {
-		return nil, nil, err
-	}
+	var req *http.Request
+	if oldReq == nil || body != nil {
+		req, err = http.NewRequest(config.method, config.address, body)
+		if err != nil {
+			return nil, nil, err
+		}
 
-	req.Header.Set("User-Agent", config.userAgent)
-	req.Header.Set("Content-Type", config.contentType)
-	for k, v := range config.customHeaders.hdr {
-		req.Header[k] = v
-	}
-	if host := req.Header.Get("Host"); host != "" {
-		req.Host = host
+		req.Header.Set("User-Agent", config.userAgent)
+		req.Header.Set("Content-Type", config.contentType)
+		for k, v := range config.customHeaders.hdr {
+			req.Header[k] = v
+		}
+		if host := req.Header.Get("Host"); host != "" {
+			req.Host = host
+		}
+	} else {
+		req = oldReq
 	}
 
 	var cancel context.CancelFunc
@@ -553,7 +563,7 @@ func runInNormalMode(cm CookieManager, out io.Writer) error {
 	}
 	defer destroyClient(hclient)
 
-	req, cancel, err := createReq()
+	req, cancel, err := createReq(nil)
 	if err != nil {
 		return err
 	}
@@ -633,6 +643,18 @@ func main() {
 	err := checkArgs()
 	if err != nil {
 		fatal(err.Error())
+	}
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			fatal(err.Error())
+		}
+		err = pprof.StartCPUProfile(f)
+		if err != nil {
+			fatal(err.Error())
+		}
+		defer pprof.StopCPUProfile()
 	}
 
 	err = run(os.Stdout)

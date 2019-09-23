@@ -92,7 +92,10 @@ func (bs *bmStat) PrintLatency(out io.Writer) {
 			count += bar.Count
 		}
 	}
-	inStdevRate := float64(count*10000/bs.reqs) / 100
+	inStdevRate := 0.0
+	if bs.reqs != 0 {
+		inStdevRate = float64(count*10000/bs.reqs) / 100
+	}
 
 	table := [][]string{
 		{"Item", "Avg", "Stdev", "Max", "+/-Stdev"},
@@ -149,9 +152,24 @@ type reqResult struct {
 	time       time.Duration
 }
 
+func (rr *reqResult) zero() {
+	rr.err = nil
+	rr.statusCode = 0
+	rr.time = 0
+}
+
 type reqCtx struct {
 	res    *reqResult
 	cancel context.CancelFunc
+	oldReq *http.Request
+}
+
+var reqCtxPool = sync.Pool{
+	New: func() interface{} {
+		return &reqCtx{
+			res: &reqResult{},
+		}
+	},
 }
 
 func aggregateStatFromReqCtx(stat *bmStat, ctx *reqCtx) {
@@ -171,6 +189,9 @@ func aggregateStatFromReqCtx(stat *bmStat, ctx *reqCtx) {
 	if err != nil {
 		warn(err.Error())
 	}
+
+	ctx.res.zero()
+	reqCtxPool.Put(ctx)
 }
 
 func runReqsInParallel(hclient *http.Client, pStat **bmStat, wg *sync.WaitGroup,
@@ -179,22 +200,23 @@ func runReqsInParallel(hclient *http.Client, pStat **bmStat, wg *sync.WaitGroup,
 	defer wg.Done()
 	stat := newBmStat()
 	*pStat = stat
-	latch := make(chan struct{}, config.bmReqPerConn)
 	reqCtxCh := make(chan *reqCtx, config.bmReqPerConn*2)
+	done := make(chan struct{})
 	timer := time.NewTimer(config.bmDuration)
 
 	var reqWg sync.WaitGroup
-	for {
-		select {
-		case latch <- struct{}{}:
-			reqWg.Add(1)
-			go func() {
-				reqRes := reqResult{}
-				req, cancel, err := createReq()
+	reqWg.Add(config.bmReqPerConn)
+	for i := 0; i < config.bmReqPerConn; i++ {
+		go func() {
+			for {
+				ctx := reqCtxPool.Get().(*reqCtx)
+				reqRes := ctx.res
+				req, cancel, err := createReq(ctx.oldReq)
 				if err != nil {
 					// failed to prepare the request body? stop the benchmark immediately
 					fatal(err.Error())
 				}
+				ctx.oldReq = req
 
 				reqStart := time.Now()
 				resp, err := hclient.Do(req)
@@ -213,15 +235,26 @@ func runReqsInParallel(hclient *http.Client, pStat **bmStat, wg *sync.WaitGroup,
 				reqRes.err = err
 			finished:
 				reqRes.time = time.Since(reqStart)
-				<-latch
-				reqWg.Done()
-				reqCtxCh <- &reqCtx{&reqRes, cancel}
-			}()
+				ctx.cancel = cancel
+				select {
+				case <-done:
+					reqWg.Done()
+					reqCtxCh <- ctx
+					return
+				case reqCtxCh <- ctx:
+				}
 
+			}
+		}()
+	}
+
+	for {
+		select {
 		case ctx := <-reqCtxCh:
 			aggregateStatFromReqCtx(stat, ctx)
 
 		case <-timer.C:
+			close(done)
 			// also count requests which are started but not finished
 			reqWg.Wait()
 			for {
@@ -234,6 +267,7 @@ func runReqsInParallel(hclient *http.Client, pStat **bmStat, wg *sync.WaitGroup,
 			}
 
 		case <-cancelled:
+			close(done)
 			// don't wait started requests if cancelled
 			goto endloop
 		}

@@ -991,7 +991,8 @@ func (suite *ClientSuite) TestBenchmarkOK() {
 		assert.Fail(t, err.Error())
 	} else {
 		output := b.String()
-		assert.True(t, strings.Contains(output, fmt.Sprintf("%d requests in ", count)))
+		assert.True(t, strings.Contains(output, fmt.Sprintf("%d requests in ", count)),
+			fmt.Sprintf("mismatch %d", count))
 		assert.False(t, strings.Contains(output, "Errors:"))
 		// print the output for debug purpose
 		fmt.Println(output)
@@ -1041,7 +1042,8 @@ func (suite *ClientSuite) TestBenchmarkBadStatusCode() {
 		output := b.String()
 		assert.True(t, strings.Contains(output, "requests in "))
 		assert.False(t, strings.Contains(output, "Errors:"))
-		assert.True(t, strings.Contains(output, fmt.Sprintf("Non-2xx or 3xx responses: %d", count)))
+		assert.True(t, strings.Contains(output, fmt.Sprintf("Non-2xx or 3xx responses: %d", count)),
+			fmt.Sprintf("mismatch %d", count))
 		fmt.Println(output)
 	}
 	<-done
