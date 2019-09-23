@@ -323,6 +323,7 @@ func checkArgs() error {
 			return errors.New("output customization is not allowed in benchmark mode")
 		}
 		config.noRedirect = true
+		config.insecure = true
 
 		if config.maxTime == 0 {
 			config.maxTime = config.bmDuration

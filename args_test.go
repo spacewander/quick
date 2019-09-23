@@ -225,6 +225,7 @@ func TestEnableBenchmakrMode(t *testing.T) {
 	assert.Nil(t, err)
 	assert.True(t, config.bmEnabled)
 	assert.True(t, config.noRedirect)
+	assert.True(t, config.insecure)
 }
 
 func TestCheckArgsWhenBenchmarkModeEnaled(t *testing.T) {
