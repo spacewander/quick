@@ -122,10 +122,11 @@ func init() {
 	flag.StringVar(&config.outFilename, "o", config.outFilename,
 		"Write the response body to this file")
 	flag.BoolVar(&config.insecure, "k", config.insecure,
-		"Allow connections to TLS sites without certs")
+		`Don't verify the certificates when connect to the server.
+This is the default in benchmark mode.`)
 
 	flag.BoolVar(&config.noRedirect, "no-redirect", config.noRedirect,
-		"Don't follow redirect")
+		"Don't follow redirect. This is the default in benchmark mode.")
 
 	timeFmt := ", in the format like 1.5s"
 	flag.DurationVar(&config.connectTimeout, "connect-timeout",

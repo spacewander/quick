@@ -269,6 +269,8 @@ func runReqsInParallel(hclient *http.Client, pStat **bmStat, wg *sync.WaitGroup,
 		case <-cancelled:
 			close(done)
 			// don't wait started requests if cancelled
+			// there will be race if we don't wait for the started requests,
+			// but it's OK since we are going to exit the programme
 			goto endloop
 		}
 	}

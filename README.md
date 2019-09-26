@@ -22,6 +22,8 @@ will start to support it (via upgrading quic-go?) once the protocol is stable.
 
 ## Feature
 
+### Normal mode
+
 This tool allows you to communicate HTTP over QUIC server in curl way.
 For example:
 
@@ -34,6 +36,39 @@ Note that `-X PUT` is used here instead of the curl style `-XPUT` because the
 way to handle command line arguments is different between Go and curl.
 
 Run `quick -h` to find more options.
+
+### Benchmark mode
+
+This tool allows you to do benchmark with a HTTP over QUIC server.
+For instance:
+
+```
+$ quick -bm-duration 30s -bm-conn 2 -bm-req-per-conn 4 www.test.com:8443
+Running 30s test @ https://www.test.com:8443
+  2 connections and 4 requests per connection
+  13872 requests in 30.070340458s
+        Item      Avg      Stdev       Max   +/-Stdev
+     Latency  17.31ms    41.11ms  574.53ms     98.83%
+  Latency Distribution
+    50.0%       12.57ms
+    75.0%       15.38ms
+    90.0%       21.54ms
+    95.0%       26.71ms
+    99.0%       66.15ms
+    99.5%       506.51ms
+    99.9%       538.54ms
+  Non-2xx or 3xx responses: 13872
+Requests/sec:    461.318355
+```
+
+To enable the benchmark mode, please specify `-bm-duration` and `-bm-conn` and
+`-bm-reqs-per-conn`.
+
+Most of the arguments in the normal mode can be used in the benchmark mode too.
+(except `-o`, `-i`, `-I` and `-dump-cookie`)
+
+Note that `quick` doesn't verify the targer server's cerificate and doesn't redirect
+the request during the benchmark.
 
 ## Installation
 
@@ -52,6 +87,9 @@ to some HTTP servers use QUIC(gQUIC actually).
 Once the HTTP3 is no longer a draft, both curl and this tool will support HTTP3.
 If you want to use the latest version of a command line HTTP3 client, this tool
 is eaiser to install, though building curl from source is easy too.
+
+By the way, this tool also allow you to do benchmark via the benchmark mode,
+which is definitely not a feature provided by curl.
 
 ## This tool is not the same as curl!
 
