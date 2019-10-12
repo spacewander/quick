@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -23,11 +24,16 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+)
+
+var (
+	builtWithRace = flag.Bool("race", false, "built with race detector")
 )
 
 const (
@@ -44,6 +50,7 @@ func (suite *ClientSuite) SetupTest() {
 }
 
 func TestClientSuite(t *testing.T) {
+	flag.Parse()
 	suite.Run(t, new(ClientSuite))
 }
 
@@ -1044,6 +1051,43 @@ func (suite *ClientSuite) TestBenchmarkBadStatusCode() {
 		assert.False(t, strings.Contains(output, "Errors:"))
 		assert.True(t, strings.Contains(output, fmt.Sprintf("Non-2xx or 3xx responses: %d", count)),
 			fmt.Sprintf("mismatch %d", count))
+		fmt.Println(output)
+	}
+	<-done
+}
+
+func (suite *ClientSuite) TestBenchmarkCancelled() {
+	if *builtWithRace {
+		// this is a known race, see the comment in benchmark.go
+		fmt.Fprintln(os.Stderr, "Skip benchmark cancelled test when built with race detector")
+		return
+	}
+
+	config.bmEnabled = true
+	config.bmDuration = 100 * time.Second
+	config.bmConn = 1
+	config.bmReqPerConn = 2
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+	done := startServer(handler)
+
+	t := suite.T()
+	b := &bytes.Buffer{}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		p, _ := os.FindProcess(syscall.Getpid())
+		p.Signal(os.Interrupt)
+	}()
+	start := time.Now()
+	err := run(b)
+	done <- struct{}{}
+	if err != nil {
+		assert.Fail(t, err.Error())
+	} else {
+		output := b.String()
+		assert.False(t, strings.Contains(output, "Errors:"))
+		assert.False(t, time.Now().Sub(start).Seconds() > 10)
 		fmt.Println(output)
 	}
 	<-done
