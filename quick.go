@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	version = "0.3.0"
+	version = "0.3.1"
 
 	defaultMethod      = http.MethodGet
 	defaultContentType = "application/json"
@@ -73,7 +73,9 @@ type quickConfig struct {
 	customHeaders headersValue
 	revolver      resolveValue
 
-	address string
+	// originHost stores the normalized version of host passed in the uri argument
+	originHost string
+	address    string
 
 	userAgent string
 	method    string
@@ -478,6 +480,9 @@ func createReq(oldReq *http.Request) (*http.Request, context.CancelFunc, error) 
 
 		req.Header.Set("User-Agent", config.userAgent)
 		req.Header.Set("Content-Type", config.contentType)
+		// the config.address may be changed via -resolve option, we need to
+		// use the origin Host instead
+		req.Header.Set("Host", config.originHost)
 		for k, v := range config.customHeaders.hdr {
 			req.Header[k] = v
 		}

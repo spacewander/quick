@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -65,6 +66,7 @@ func (rv *resolveValue) Set(value string) error {
 }
 
 func resolveAddr(host string, config *quickConfig) string {
+	config.originHost = host
 	for _, pair := range config.revolver.addrs {
 		if pair[0] == host {
 			return pair[1]
@@ -72,6 +74,19 @@ func resolveAddr(host string, config *quickConfig) string {
 	}
 
 	return host
+}
+
+// copied from Go's source code
+func refererForURL(lastReq, newReq *url.URL) string {
+	if lastReq.Scheme == "https" && newReq.Scheme == "http" {
+		return ""
+	}
+	referer := lastReq.String()
+	if lastReq.User != nil {
+		auth := lastReq.User.String() + "@"
+		referer = strings.Replace(referer, auth, "", 1)
+	}
+	return referer
 }
 
 func redirectResolved(req *http.Request, via []*http.Request) error {
@@ -88,8 +103,14 @@ func redirectResolved(req *http.Request, via []*http.Request) error {
 		}
 		host += ":443"
 	}
+	originHost := config.originHost
 	newHost := resolveAddr(host, config)
 	if newHost != host {
+		preReqURL := via[len(via)-1].URL
+		preReqURL.Host = originHost
+		if ref := refererForURL(preReqURL, req.URL); ref != "" {
+			req.Header.Set("Referer", ref)
+		}
 		req.URL.Host = newHost
 		req.Host = newHost
 	}
