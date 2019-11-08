@@ -835,7 +835,7 @@ func (suite *ClientSuite) TestResolveWithRedirect_TestReferer() {
 	if err != nil {
 		assert.Fail(t, err.Error())
 	} else {
-		assert.Equal(t, "https://www.origin.com:443", string(b.Bytes()))
+		assert.Equal(t, "https://www.origin.com", string(b.Bytes()))
 	}
 	<-done
 }

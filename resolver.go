@@ -66,7 +66,11 @@ func (rv *resolveValue) Set(value string) error {
 }
 
 func resolveAddr(host string, config *quickConfig) string {
-	config.originHost = host
+	if h, p, _ := net.SplitHostPort(host); p == "443" {
+		config.originHost = h
+	} else {
+		config.originHost = host
+	}
 	for _, pair := range config.revolver.addrs {
 		if pair[0] == host {
 			return pair[1]
