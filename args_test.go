@@ -218,6 +218,16 @@ func TestSetContentType(t *testing.T) {
 	assert.Equal(t, "xxx", config.contentType)
 }
 
+func TestHeadersOnly(t *testing.T) {
+	defer resetArgs()
+
+	os.Args = []string{"cmd", "-I", "test.com"}
+	err := checkArgs()
+	assert.Nil(t, err)
+	assert.True(t, config.headersOnly)
+	assert.Equal(t, http.MethodHead, config.method)
+}
+
 func TestEnableBenchmakrMode(t *testing.T) {
 	defer resetArgs()
 	os.Args = []string{"cmd", "-bm-duration", "1s", "-bm-req-per-conn", "3", "-bm-conn", "12", "test.com"}

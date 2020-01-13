@@ -288,6 +288,8 @@ func checkArgs() error {
 	if config.method == "" {
 		if config.data.Provided() || config.forms.Provided() {
 			config.method = http.MethodPost
+		} else if config.headersOnly {
+			config.method = http.MethodHead
 		} else {
 			config.method = defaultMethod
 		}

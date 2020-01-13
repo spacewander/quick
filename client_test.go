@@ -272,31 +272,6 @@ func (suite *ClientSuite) TestReadResponseHeaderInclude() {
 	<-done
 }
 
-func (suite *ClientSuite) TestReadResponseHeaderOnly() {
-	data := "hello world"
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("data", data)
-		w.Write(bytes.Repeat([]byte("test"), 1000))
-	})
-	done := startServer(handler)
-
-	config.headersOnly = true
-
-	t := suite.T()
-	b := &bytes.Buffer{}
-	err := run(b)
-	done <- struct{}{}
-	if err != nil {
-		assert.Nil(t, err, err.Error())
-	} else {
-		assert.True(t, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
-		assert.True(t, bytes.Contains(b.Bytes(), []byte("Data: "+data+"\r\n")))
-		assert.False(t, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
-		assert.False(t, bytes.Contains(b.Bytes(), []byte("test")))
-	}
-	<-done
-}
-
 func (suite *ClientSuite) TestSendHeader() {
 	config.customHeaders.Set(" input : blahblah ")
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -378,7 +353,7 @@ func (suite *ClientSuite) TestReadResponseBodyWithHEAD() {
 	<-done
 }
 
-func (suite *ClientSuite) TestReadResponseHeaderOnlyWithHEAD() {
+func (suite *ClientSuite) TestReadResponseHeaderOnlyWithSpecificMethod() {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("method", r.Method)
 		w.Write(bytes.Repeat([]byte("test"), 1000))
@@ -386,7 +361,7 @@ func (suite *ClientSuite) TestReadResponseHeaderOnlyWithHEAD() {
 	done := startServer(handler)
 
 	config.headersOnly = true
-	config.method = http.MethodHead
+	config.method = http.MethodGet
 
 	t := suite.T()
 	b := &bytes.Buffer{}
@@ -396,7 +371,7 @@ func (suite *ClientSuite) TestReadResponseHeaderOnlyWithHEAD() {
 		assert.Nil(t, err, err.Error())
 	} else {
 		assert.True(t, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
-		assert.True(t, bytes.Contains(b.Bytes(), []byte("Method: HEAD\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("Method: GET\r\n")))
 		assert.False(t, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
 		assert.False(t, bytes.Contains(b.Bytes(), []byte("test")))
 	}
