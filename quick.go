@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	version = "0.3.2"
+	version = "0.3.3"
 
 	defaultMethod      = http.MethodGet
 	defaultContentType = "application/json"
@@ -596,8 +596,10 @@ func runInNormalMode(cm CookieManager, out io.Writer) error {
 }
 
 func runInBenchmarkMode(cm CookieManager, out io.Writer) error {
+	timestamp := time.Now().Format(time.RFC3339)
 	fmt.Fprintf(out,
-		"Running %v test @ %s\n  %d connections and %d requests per connection\n",
+		"Start benchmark at %s\nRunning %v test @ %s\n  %d connections and %d requests per connection\n",
+		timestamp,
 		config.bmDuration,
 		config.address,
 		config.bmConn,

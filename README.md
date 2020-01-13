@@ -44,6 +44,7 @@ For instance:
 
 ```
 $ quick -bm-duration 30s -bm-conn 2 -bm-req-per-conn 4 www.test.com:8443
+Start benchmark at 2020-01-13T17:19:35+08:00
 Running 30s test @ https://www.test.com:8443
   2 connections and 4 requests per connection
   13872 requests in 30.070340458s
