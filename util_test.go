@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/h2quic"
+	"github.com/lucas-clemente/quic-go/http3"
 )
 
 const (
@@ -51,7 +51,7 @@ func startServer(handler http.Handler) chan struct{} {
 			panic(err)
 		}
 
-		server := &h2quic.Server{
+		server := &http3.Server{
 			Server: &http.Server{
 				Addr:    netAddr.Host,
 				Handler: handler,

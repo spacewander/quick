@@ -114,7 +114,7 @@ func (suite *ClientSuite) TestMaxTime() {
 		assert.NotNil(t, err)
 	} else {
 		assert.Equal(t,
-			"Get "+config.address+": context deadline exceeded", err.Error())
+			"Get "+config.address+": Read on stream 0 canceled with error code 268", err.Error())
 	}
 	<-done
 }
@@ -138,7 +138,7 @@ func (suite *ClientSuite) TestMaxTimeReadBodyTimeout() {
 		assert.NotNil(t, err)
 	} else {
 		assert.Equal(t,
-			"failed to copy the output from "+config.address+": context deadline exceeded",
+			"failed to copy the output from "+config.address+": Read on stream 0 canceled with error code 268",
 			err.Error())
 	}
 	<-done
@@ -161,7 +161,7 @@ func (suite *ClientSuite) TestIdleTimeout() {
 		assert.NotNil(t, err)
 	} else {
 		assert.Equal(t,
-			"Get "+config.address+": InvalidHeadersStreamData: NetworkIdleTimeout: No recent network activity.",
+			"Get "+config.address+": NO_ERROR: No recent network activity",
 			err.Error())
 	}
 	<-done
@@ -264,7 +264,7 @@ func (suite *ClientSuite) TestReadResponseHeaderInclude() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.True(t, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("HTTP/3 200 OK\r\n")))
 		assert.True(t, bytes.Contains(b.Bytes(), []byte("Data: "+data+"\r\n")))
 		assert.True(t, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
 		assert.True(t, bytes.Contains(b.Bytes(), body))
@@ -289,7 +289,7 @@ func (suite *ClientSuite) TestReadResponseHeaderOnly() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.True(t, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("HTTP/3 200 OK\r\n")))
 		assert.True(t, bytes.Contains(b.Bytes(), []byte("Data: "+data+"\r\n")))
 		assert.False(t, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
 		assert.False(t, bytes.Contains(b.Bytes(), []byte("test")))
@@ -395,7 +395,7 @@ func (suite *ClientSuite) TestReadResponseHeaderOnlyWithHEAD() {
 	if err != nil {
 		assert.Nil(t, err, err.Error())
 	} else {
-		assert.True(t, bytes.Contains(b.Bytes(), []byte("HTTP/2.0 200 OK\r\n")))
+		assert.True(t, bytes.Contains(b.Bytes(), []byte("HTTP/3 200 OK\r\n")))
 		assert.True(t, bytes.Contains(b.Bytes(), []byte("Method: HEAD\r\n")))
 		assert.False(t, bytes.Contains(b.Bytes(), []byte("\r\n\r\n")))
 		assert.False(t, bytes.Contains(b.Bytes(), []byte("test")))

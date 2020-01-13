@@ -20,11 +20,11 @@ import (
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/h2quic"
+	"github.com/lucas-clemente/quic-go/http3"
 )
 
 const (
-	version = "0.3.2"
+	version = "0.4.0"
 
 	defaultMethod      = http.MethodGet
 	defaultContentType = "application/json"
@@ -429,7 +429,7 @@ func createClient(cm CookieManager) (*http.Client, error) {
 		ServerName:         config.sni,
 	}
 
-	roundTripper := &h2quic.RoundTripper{
+	roundTripper := &http3.RoundTripper{
 		QuicConfig:      quicConf,
 		TLSClientConfig: tlsConf,
 		Dial:            dialWithTimeout,
@@ -450,8 +450,8 @@ func createClient(cm CookieManager) (*http.Client, error) {
 }
 
 func destroyClient(hclient *http.Client) {
-	roundTripper := hclient.Transport.(*h2quic.RoundTripper)
-	roundTripper.Close()
+	//roundTripper := hclient.Transport.(*http3.RoundTripper)
+	//roundTripper.Close()
 }
 
 func createReq(oldReq *http.Request) (*http.Request, context.CancelFunc, error) {
@@ -528,7 +528,7 @@ func readResp(req *http.Request, resp *http.Response, out io.Writer) error {
 		}
 	}
 
-	if headersOnly {
+	if headersOnly || req.Method == http.MethodHead {
 		return nil
 	}
 
