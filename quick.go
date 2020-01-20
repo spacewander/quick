@@ -505,7 +505,7 @@ func createReq(oldReq *http.Request) (*http.Request, context.CancelFunc, error) 
 	return req, cancel, nil
 }
 
-func readResp(req *http.Request, resp *http.Response, out io.Writer) error {
+func readResp(req *http.Request, resp *http.Response, out io.Writer, buf []byte) error {
 	headersIncluded := config.headersIncluded
 	headersOnly := config.headersOnly
 	if headersIncluded || headersOnly {
@@ -556,7 +556,7 @@ func readResp(req *http.Request, resp *http.Response, out io.Writer) error {
 	}
 
 	defer resp.Body.Close()
-	_, err := io.Copy(out, resp.Body)
+	_, err := io.CopyBuffer(out, resp.Body, buf)
 	if err != nil {
 		return fmt.Errorf("failed to copy the output from %s: %s",
 			config.address, err.Error())
@@ -592,7 +592,7 @@ func runInNormalMode(cm CookieManager, out io.Writer) error {
 		}
 	}
 
-	return readResp(req, resp, out)
+	return readResp(req, resp, out, make([]byte, 32*1024))
 }
 
 func runInBenchmarkMode(cm CookieManager, out io.Writer) error {

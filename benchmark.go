@@ -159,9 +159,10 @@ func (rr *reqResult) zero() {
 }
 
 type reqCtx struct {
-	res    *reqResult
-	cancel context.CancelFunc
-	oldReq *http.Request
+	res     *reqResult
+	respBuf []byte
+	cancel  context.CancelFunc
+	oldReq  *http.Request
 }
 
 var reqCtxPool = sync.Pool{
@@ -218,13 +219,17 @@ func runReqsInParallel(hclient *http.Client, pStat **bmStat, wg *sync.WaitGroup,
 				}
 				ctx.oldReq = req
 
+				if len(ctx.respBuf) == 0 {
+					ctx.respBuf = make([]byte, 32*1024)
+				}
+
 				reqStart := time.Now()
 				resp, err := hclient.Do(req)
 				if err != nil {
 					goto failed
 				}
 
-				err = readResp(req, resp, ioutil.Discard)
+				err = readResp(req, resp, ioutil.Discard, ctx.respBuf)
 				if err != nil {
 					goto failed
 				}
