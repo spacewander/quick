@@ -9,5 +9,5 @@ require (
 	github.com/lucas-clemente/quic-go v0.10.2
 	github.com/stretchr/testify v1.3.0
 	github.com/zoidbergwill/hdrhistogram v0.0.0-20190826083824-4d99d8ade09d
-	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd
+	golang.org/x/net v0.7.0
 )
